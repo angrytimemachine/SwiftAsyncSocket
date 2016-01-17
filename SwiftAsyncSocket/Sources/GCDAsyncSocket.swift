@@ -92,7 +92,7 @@ class GCDAsyncSocket {
     var connectInterface6 : NSData? = nil
     var connectInterfaceUN : NSData? = nil
     
-    var socketQueue : dispatch_queue_t? = nil
+    let socketQueue : dispatch_queue_t
     
     var accept4Source : dispatch_source_t? = nil
     var accept6Source : dispatch_source_t? = nil
@@ -135,9 +135,9 @@ class GCDAsyncSocket {
             if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
                 result = self._delegate
             }
-            else if let sq = socketQueue {
+            else {
                 
-                dispatch_sync(sq, { () -> Void in
+                dispatch_sync(socketQueue, { () -> Void in
                     result = self._delegate
                 })
             }
@@ -152,11 +152,11 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
         }
-        else if let sq = socketQueue {
+        else {
             if synchronously {
-                dispatch_sync(sq, block)
+                dispatch_sync(socketQueue, block)
             }else{
-                dispatch_async(sq, block)
+                dispatch_async(socketQueue, block)
             }
         }
     }
@@ -175,9 +175,9 @@ class GCDAsyncSocket {
             if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
                 result = self._delegateQueue
             }
-            else if let sq = socketQueue {
+            else {
                 
-                dispatch_sync(sq, { () -> Void in
+                dispatch_sync(socketQueue, { () -> Void in
                     result = self._delegateQueue
                 })
             }
@@ -197,11 +197,11 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
         }
-        else if let sq = socketQueue {
+        else {
             if synchronously {
-                dispatch_sync(sq, block)
+                dispatch_sync(socketQueue, block)
             }else{
-                dispatch_async(sq, block)
+                dispatch_async(socketQueue, block)
             }
         }
     }
@@ -229,8 +229,8 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
             
-        }else if let sq = socketQueue {
-            dispatch_sync(sq, block)
+        }else {
+            dispatch_sync(socketQueue, block)
         }
     }
     func setDelegate(newDelegate : AnyObject?, newDelegateQueue : dispatch_queue_t?, synchronously : Bool ){
@@ -247,11 +247,11 @@ class GCDAsyncSocket {
         
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
-        } else if let sq = socketQueue {
+        } else {
             if synchronously {
-                dispatch_sync(sq, block)
+                dispatch_sync(socketQueue, block)
             }else{
-                dispatch_async(sq, block)
+                dispatch_async(socketQueue, block)
             }
         }
         
@@ -267,8 +267,8 @@ class GCDAsyncSocket {
         // Note: YES means IPv4Disabled is OFF
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.IPv4Disabled)
-        }else if let sq = socketQueue {
-            dispatch_sync(sq, { () -> Void in
+        }else {
+            dispatch_sync(socketQueue, { () -> Void in
                 result = !self.config.contains(.IPv4Disabled)
             })
         }
@@ -289,9 +289,9 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
         }
-        else if let sq = socketQueue {
+        else {
             
-            dispatch_sync(sq, block)
+            dispatch_sync(socketQueue, block)
         }
     }
     func isIPv6Enabled() -> Bool {
@@ -299,8 +299,8 @@ class GCDAsyncSocket {
         // Note: YES means kIPv6Disabled is OFF
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.IPv6Disabled)
-        }else if let sq = socketQueue {
-            dispatch_sync(sq, { () -> Void in
+        }else {
+            dispatch_sync(socketQueue, { () -> Void in
                 result = !self.config.contains(.IPv6Disabled)
             })
         }
@@ -321,9 +321,9 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
         }
-        else if let sq = socketQueue {
+        else {
             
-            dispatch_sync(sq, block)
+            dispatch_sync(socketQueue, block)
         }
     }
     var isIPv4PreferredOverIPv6 : Bool {
@@ -332,9 +332,9 @@ class GCDAsyncSocket {
             if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
                 result = config.contains(.PreferIPv6)
             }
-            else if let sq = socketQueue {
+            else {
                 
-                dispatch_sync(sq, { () -> Void in
+                dispatch_sync(socketQueue, { () -> Void in
                     result = self.config.contains(.PreferIPv6)
                 })
             }
@@ -356,8 +356,8 @@ class GCDAsyncSocket {
         }
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
-        } else if let sq = socketQueue {
-            dispatch_async(sq, block)
+        } else {
+            dispatch_async(socketQueue, block)
         }
     }
     var _userData : AnyObject? = nil
@@ -368,9 +368,9 @@ class GCDAsyncSocket {
             if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
                 result = self._userData
             }
-            else if let sq = socketQueue {
+            else {
                 
-                dispatch_sync(sq, { () -> Void in
+                dispatch_sync(socketQueue, { () -> Void in
                     result = self._userData
                 })
             }
@@ -385,12 +385,28 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
         }
-        else if let sq = socketQueue {
-            dispatch_sync(sq, block)
+        else {
+            dispatch_sync(socketQueue, block)
         }
     }
     
     init(withDelegate aDelegate : AnyObject?, delegateQueue dq : dispatch_queue_t?, socketQueue aSocketQueue : dispatch_queue_t!) {
+        if let sq = aSocketQueue {
+            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), "The given socketQueue parameter must not be a concurrent queue.");
+            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), "The given socketQueue parameter must not be a concurrent queue.");
+            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), "The given socketQueue parameter must not be a concurrent queue.");
+            
+            socketQueue = aSocketQueue;
+            //always using ARC, don't need this
+            //            #if !OS_OBJECT_USE_OBJC
+            //                dispatch_retain(sq);
+            //            #endif
+        }
+        else
+        {
+            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName, nil);
+        }
+        
         setDelegate(aDelegate, synchronously: true)
         if let dQueue = dq {
             //Always using ARC don't need this
@@ -400,21 +416,7 @@ class GCDAsyncSocket {
             setDelegateQueue(dQueue, synchronously: true)
         }
         
-        if let sq = aSocketQueue {
-            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), "The given socketQueue parameter must not be a concurrent queue.");
-            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), "The given socketQueue parameter must not be a concurrent queue.");
-            assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), "The given socketQueue parameter must not be a concurrent queue.");
-            
-            socketQueue = aSocketQueue;
-            //always using ARC, don't need this
-//            #if !OS_OBJECT_USE_OBJC
-//                dispatch_retain(sq);
-//            #endif
-        }
-        else
-        {
-            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName, nil);
-        }
+
         
         // The dispatch_queue_set_specific() and dispatch_get_specific() functions take a "void *key" parameter.
         // From the documentation:
@@ -438,11 +440,9 @@ class GCDAsyncSocket {
        
 //        let context = UnsafeMutablePointer<GCDAsyncSocket>.alloc(1)
 //        context.initialize(self)
-        if let sq = socketQueue {
-            var selfPtr = self
-            withUnsafeMutablePointer(&selfPtr) { v in
-                dispatch_queue_set_specific(sq, GCDAsyncSocketQueueName, v, nil);
-            }
+        var selfPtr = self
+        withUnsafeMutablePointer(&selfPtr) { v in
+            dispatch_queue_set_specific(socketQueue, GCDAsyncSocketQueueName, v, nil);
         }
 
         preBuffer = GCDAsyncSocketPreBuffer.init(withCapacity: 1024 * 4)
@@ -466,8 +466,8 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             close(withError: nil)
             
-        } else if let sq = socketQueue {
-            dispatch_sync(sq, { () -> Void in
+        } else {
+            dispatch_sync(socketQueue, { () -> Void in
                 self.close(withError: nil)
             })
         }
@@ -484,7 +484,7 @@ class GCDAsyncSocket {
 //        #if !OS_OBJECT_USE_OBJC
 //            if (socketQueue) dispatch_release(socketQueue);
 //        #endif
-        socketQueue = nil;
+//        socketQueue = nil;
         
 //        LogInfo(@"%@ - %@ (finish)", THIS_METHOD, self);
     }
@@ -511,7 +511,6 @@ class GCDAsyncSocket {
 
         let interface = inputInterface != nil ? inputInterface! : ""
         
-        var error : GCDAsyncSocketError? = nil
         // CreateSocket Block returns the file descriptor that it connected with
         // This block will be invoked within the dispatch block below.
         let createSocket = { (domain: Int32, interfaceAddress : NSData?) throws -> Int32 in
@@ -608,7 +607,7 @@ class GCDAsyncSocket {
             
             // Create accept sources
             if enableIPv4 {
-                accept4Source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, self.socket4FD, 0 self.socketQueue)
+//                accept4Source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, self.socket4FD, 0 self.socketQueue)
                 
                 
             }
@@ -617,8 +616,8 @@ class GCDAsyncSocket {
         
 //        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
 //            block()
-//        } else if let sq = socketQueue {
-//            dispatch_sync(sq, block)
+//        } else {
+//            dispatch_sync(socketQueue, block)
 //        }
         
         if let err = error {
