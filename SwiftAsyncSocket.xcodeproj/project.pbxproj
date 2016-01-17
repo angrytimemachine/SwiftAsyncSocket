@@ -7,9 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3835AA681C433B580055A53B /* SwiftAsyncSocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 3835AA671C433B580055A53B /* SwiftAsyncSocket.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		380D9DAE1C4B611D00FC9D07 /* SwiftCWrapper.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 380D9DAD1C4B611D00FC9D07 /* SwiftCWrapper.framework */; };
 		3835AA6F1C433B580055A53B /* SwiftAsyncSocket.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3835AA641C433B580055A53B /* SwiftAsyncSocket.framework */; };
 		3835AA741C433B580055A53B /* SwiftAsyncSocketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA731C433B580055A53B /* SwiftAsyncSocketTests.swift */; };
+		3835AA7F1C433ECD0055A53B /* Package.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA7E1C433ECD0055A53B /* Package.swift */; };
+		3835AA841C433F7E0055A53B /* GCDAsyncSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA831C433F7E0055A53B /* GCDAsyncSocket.swift */; };
+		3835AA871C4352160055A53B /* GCDAsyncSocketPreBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA861C4352160055A53B /* GCDAsyncSocketPreBuffer.swift */; };
+		3835AA891C43522E0055A53B /* GCDAsyncReadPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */; };
+		3835AA8B1C4352440055A53B /* GCDAsyncWritePacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */; };
+		3835AA8D1C43525C0055A53B /* GCDAsyncSpecialPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -23,12 +29,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		380D9DAD1C4B611D00FC9D07 /* SwiftCWrapper.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftCWrapper.framework; path = SwiftCWrapper/build/Debug/SwiftCWrapper.framework; sourceTree = "<group>"; };
 		3835AA641C433B580055A53B /* SwiftAsyncSocket.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SwiftAsyncSocket.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		3835AA671C433B580055A53B /* SwiftAsyncSocket.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SwiftAsyncSocket.h; sourceTree = "<group>"; };
 		3835AA691C433B580055A53B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3835AA6E1C433B580055A53B /* SwiftAsyncSocketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftAsyncSocketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3835AA731C433B580055A53B /* SwiftAsyncSocketTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftAsyncSocketTests.swift; sourceTree = "<group>"; };
 		3835AA751C433B580055A53B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3835AA7E1C433ECD0055A53B /* Package.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		3835AA831C433F7E0055A53B /* GCDAsyncSocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocket.swift; sourceTree = "<group>"; };
+		3835AA861C4352160055A53B /* GCDAsyncSocketPreBuffer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocketPreBuffer.swift; sourceTree = "<group>"; };
+		3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncReadPacket.swift; sourceTree = "<group>"; };
+		3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncWritePacket.swift; sourceTree = "<group>"; };
+		3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSpecialPacket.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +48,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				380D9DAE1C4B611D00FC9D07 /* SwiftCWrapper.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,6 +66,7 @@
 		3835AA5A1C433B580055A53B = {
 			isa = PBXGroup;
 			children = (
+				380D9DAD1C4B611D00FC9D07 /* SwiftCWrapper.framework */,
 				3835AA661C433B580055A53B /* SwiftAsyncSocket */,
 				3835AA721C433B580055A53B /* SwiftAsyncSocketTests */,
 				3835AA651C433B580055A53B /* Products */,
@@ -71,8 +85,9 @@
 		3835AA661C433B580055A53B /* SwiftAsyncSocket */ = {
 			isa = PBXGroup;
 			children = (
-				3835AA671C433B580055A53B /* SwiftAsyncSocket.h */,
 				3835AA691C433B580055A53B /* Info.plist */,
+				3835AA7E1C433ECD0055A53B /* Package.swift */,
+				3835AA821C433EED0055A53B /* Sources */,
 			);
 			path = SwiftAsyncSocket;
 			sourceTree = "<group>";
@@ -86,6 +101,18 @@
 			path = SwiftAsyncSocketTests;
 			sourceTree = "<group>";
 		};
+		3835AA821C433EED0055A53B /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				3835AA831C433F7E0055A53B /* GCDAsyncSocket.swift */,
+				3835AA861C4352160055A53B /* GCDAsyncSocketPreBuffer.swift */,
+				3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */,
+				3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */,
+				3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -93,7 +120,6 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3835AA681C433B580055A53B /* SwiftAsyncSocket.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,6 +220,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3835AA841C433F7E0055A53B /* GCDAsyncSocket.swift in Sources */,
+				3835AA8D1C43525C0055A53B /* GCDAsyncSpecialPacket.swift in Sources */,
+				3835AA871C4352160055A53B /* GCDAsyncSocketPreBuffer.swift in Sources */,
+				3835AA7F1C433ECD0055A53B /* Package.swift in Sources */,
+				3835AA891C43522E0055A53B /* GCDAsyncReadPacket.swift in Sources */,
+				3835AA8B1C4352440055A53B /* GCDAsyncWritePacket.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,11 +337,16 @@
 		3835AA791C433B580055A53B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/SwiftCWrapper/build/Debug",
+				);
 				FRAMEWORK_VERSION = A;
 				INFOPLIST_FILE = SwiftAsyncSocket/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -317,17 +354,23 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.joelsaltzman.SwiftAsyncSocket;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
 		3835AA7A1C433B580055A53B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/SwiftCWrapper/build/Debug",
+				);
 				FRAMEWORK_VERSION = A;
 				INFOPLIST_FILE = SwiftAsyncSocket/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -379,6 +422,7 @@
 				3835AA7A1C433B580055A53B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		3835AA7B1C433B580055A53B /* Build configuration list for PBXNativeTarget "SwiftAsyncSocketTests" */ = {
 			isa = XCConfigurationList;
@@ -387,6 +431,7 @@
 				3835AA7D1C433B580055A53B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

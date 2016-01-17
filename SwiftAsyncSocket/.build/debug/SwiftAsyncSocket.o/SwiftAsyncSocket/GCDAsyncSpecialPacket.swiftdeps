@@ -1,0 +1,40 @@
+### Swift dependencies file v0 ###
+provides-top-level:
+- "GCDAsyncSpecialPacket"
+provides-nominal:
+- "C16SwiftAsyncSocket21GCDAsyncSpecialPacket"
+provides-member:
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", ""]
+depends-top-level:
+- "AnyObject"
+- "String"
+- "GCDAsyncSpecialPacket"
+depends-member:
+- !private ["Ps9AnyObject", "tlsSettings"]
+- ["Ps9AnyObject", ""]
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", "AnyObject"]
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", "String"]
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", "deinit"]
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", "init"]
+- ["C16SwiftAsyncSocket21GCDAsyncSpecialPacket", "tlsSettings"]
+depends-nominal:
+- "Ps9AnyObject"
+- "C16SwiftAsyncSocket21GCDAsyncSpecialPacket"
+depends-dynamic-lookup:
+depends-external:
+- "/usr/lib/swift/linux/x86_64/Swift.swiftmodule"
+- "/usr/lib/swift/shims/UnicodeShims.h"
+- "/usr/lib/swift/shims/SwiftStdint.h"
+- "/usr/lib/swift/shims/SwiftStddef.h"
+- "/usr/lib/swift/shims/LibcShims.h"
+- "/usr/lib/swift/shims/RuntimeStubs.h"
+- "/usr/lib/swift/shims/RuntimeShims.h"
+- "/usr/lib/swift/shims/RefCount.h"
+- "/usr/lib/swift/shims/HeapObject.h"
+- "/usr/lib/swift/shims/GlobalObjects.h"
+- "/usr/lib/swift/shims/FoundationShims.h"
+- "/usr/lib/swift/shims/CoreFoundationShims.h"
+- "/usr/lib/swift/shims/module.map"
+- "/usr/lib/swift/linux/x86_64/Foundation.swiftmodule"
+- "/usr/lib/swift/linux/x86_64/Glibc.swiftmodule"
+interface-hash: "5699a7b0fb85fc6ba20f5006a6faa311"

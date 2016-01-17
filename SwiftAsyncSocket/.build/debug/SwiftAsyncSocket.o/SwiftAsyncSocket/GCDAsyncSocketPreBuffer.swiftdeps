@@ -1,0 +1,171 @@
+### Swift dependencies file v0 ###
+provides-top-level:
+- "GCDAsyncSocketPreBuffer"
+provides-nominal:
+- "C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer"
+provides-member:
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", ""]
+depends-top-level:
+- !private "+="
+- !private "-"
+- "size_t"
+- !private "=="
+- "CInt"
+- !private ">"
+- !private "+"
+- "UnsafeMutablePointer"
+- "GCDAsyncSocketPreBuffer"
+depends-member:
+- !private ["Ps9AnyObject", "UnsafeMutablePointer"]
+- !private ["Ps9AnyObject", "availableBytes"]
+- !private ["Ps9AnyObject", "preBuffer"]
+- !private ["Ps9AnyObject", "preBufferSize"]
+- !private ["Ps9AnyObject", "readPointer"]
+- !private ["Ps9AnyObject", "reset"]
+- !private ["Ps9AnyObject", "writePointer"]
+- ["Ps9AnyObject", ""]
+- !private ["Ps22BidirectionalIndexType", "IntegerLiteralType"]
+- !private ["Ps22BidirectionalIndexType", "Stride"]
+- !private ["Ps22BidirectionalIndexType", "alloc"]
+- !private ["Ps22BidirectionalIndexType", "dealloc"]
+- !private ["Ps21BitwiseOperationsType", "IntegerLiteralType"]
+- !private ["Sb", "_getBuiltinLogicValue"]
+- !private ["Ps25BooleanLiteralConvertible", "_getBuiltinLogicValue"]
+- !private ["Ps11BooleanType", "_getBuiltinLogicValue"]
+- !private ["Ps10Comparable", "IntegerLiteralType"]
+- !private ["Ps10Comparable", "Stride"]
+- !private ["Ps10Comparable", "alloc"]
+- !private ["Ps10Comparable", "dealloc"]
+- !private ["Ps28CustomDebugStringConvertible", "Stride"]
+- !private ["Ps28CustomDebugStringConvertible", "alloc"]
+- !private ["Ps28CustomDebugStringConvertible", "dealloc"]
+- !private ["Ps23CustomStringConvertible", "IntegerLiteralType"]
+- !private ["Ps23CustomStringConvertible", "_getBuiltinLogicValue"]
+- !private ["Ps9Equatable", "IntegerLiteralType"]
+- !private ["Ps9Equatable", "Stride"]
+- !private ["Ps9Equatable", "_getBuiltinLogicValue"]
+- !private ["Ps9Equatable", "alloc"]
+- !private ["Ps9Equatable", "dealloc"]
+- !private ["Ps16ForwardIndexType", "IntegerLiteralType"]
+- !private ["Ps16ForwardIndexType", "Stride"]
+- !private ["Ps16ForwardIndexType", "alloc"]
+- !private ["Ps16ForwardIndexType", "dealloc"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "CInt"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "UnsafeMutablePointer"]
+- !private ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "availableBytes"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "deinit"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "preBuffer"]
+- !private ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "preBufferSize"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "readBuffer"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "readPointer"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "reset"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "size_t"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "writeBuffer"]
+- ["C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer", "writePointer"]
+- !private ["Ps8Hashable", "IntegerLiteralType"]
+- !private ["Ps8Hashable", "Stride"]
+- !private ["Ps8Hashable", "_getBuiltinLogicValue"]
+- !private ["Ps8Hashable", "alloc"]
+- !private ["Ps8Hashable", "dealloc"]
+- !private ["Si", "IntegerLiteralType"]
+- !private ["Ps21IntegerArithmeticType", "IntegerLiteralType"]
+- !private ["Ps25IntegerLiteralConvertible", "IntegerLiteralType"]
+- !private ["Ps11IntegerType", "IntegerLiteralType"]
+- !private ["Ps14MirrorPathType", "IntegerLiteralType"]
+- !private ["Ps21NilLiteralConvertible", "Stride"]
+- !private ["Ps21NilLiteralConvertible", "alloc"]
+- !private ["Ps21NilLiteralConvertible", "dealloc"]
+- !private ["Ps21RandomAccessIndexType", "IntegerLiteralType"]
+- !private ["Ps21RandomAccessIndexType", "Stride"]
+- !private ["Ps21RandomAccessIndexType", "alloc"]
+- !private ["Ps21RandomAccessIndexType", "dealloc"]
+- !private ["Ps17SignedIntegerType", "IntegerLiteralType"]
+- !private ["Ps16SignedNumberType", "IntegerLiteralType"]
+- !private ["Ps10Strideable", "IntegerLiteralType"]
+- !private ["Ps10Strideable", "Stride"]
+- !private ["Ps10Strideable", "alloc"]
+- !private ["Ps10Strideable", "dealloc"]
+- !private ["Sp", "Stride"]
+- !private ["Sp", "alloc"]
+- !private ["Sp", "dealloc"]
+- !private ["Sp", "deinit"]
+- !private ["P10Foundation13_BitShiftable", "IntegerLiteralType"]
+- !private ["Ps33_BuiltinBooleanLiteralConvertible", "_getBuiltinLogicValue"]
+- !private ["Ps33_BuiltinIntegerLiteralConvertible", "IntegerLiteralType"]
+- !private ["Ps14_Incrementable", "IntegerLiteralType"]
+- !private ["Ps14_Incrementable", "Stride"]
+- !private ["Ps14_Incrementable", "alloc"]
+- !private ["Ps14_Incrementable", "dealloc"]
+- !private ["Ps22_IntegerArithmeticType", "IntegerLiteralType"]
+- !private ["P10Foundation12_IntegerLike", "IntegerLiteralType"]
+- !private ["Ps12_IntegerType", "IntegerLiteralType"]
+- !private ["P10Foundation21_ObjectiveCBridgeable", "IntegerLiteralType"]
+- !private ["P10Foundation21_ObjectiveCBridgeable", "_getBuiltinLogicValue"]
+- !private ["Ps12_PointerType", "Stride"]
+- !private ["Ps12_PointerType", "alloc"]
+- !private ["Ps12_PointerType", "dealloc"]
+- !private ["Ps22_RandomAccessAmbiguity", "IntegerLiteralType"]
+- !private ["Ps22_RandomAccessAmbiguity", "Stride"]
+- !private ["Ps22_RandomAccessAmbiguity", "alloc"]
+- !private ["Ps22_RandomAccessAmbiguity", "dealloc"]
+- !private ["Ps12_Reflectable", "IntegerLiteralType"]
+- !private ["Ps12_Reflectable", "Stride"]
+- !private ["Ps12_Reflectable", "_getBuiltinLogicValue"]
+- !private ["Ps12_Reflectable", "alloc"]
+- !private ["Ps12_Reflectable", "dealloc"]
+- !private ["Ps18_SignedIntegerType", "IntegerLiteralType"]
+depends-nominal:
+- "Ps9AnyObject"
+- !private "Ps22BidirectionalIndexType"
+- !private "Ps21BitwiseOperationsType"
+- !private "Sb"
+- !private "Ps25BooleanLiteralConvertible"
+- !private "Ps11BooleanType"
+- !private "Ps10Comparable"
+- !private "Ps28CustomDebugStringConvertible"
+- !private "Ps23CustomStringConvertible"
+- !private "Ps9Equatable"
+- !private "Ps16ForwardIndexType"
+- "C16SwiftAsyncSocket23GCDAsyncSocketPreBuffer"
+- !private "Ps8Hashable"
+- !private "Si"
+- !private "Ps21IntegerArithmeticType"
+- !private "Ps25IntegerLiteralConvertible"
+- !private "Ps11IntegerType"
+- !private "Ps14MirrorPathType"
+- !private "Ps21NilLiteralConvertible"
+- !private "Ps21RandomAccessIndexType"
+- !private "Ps17SignedIntegerType"
+- !private "Ps16SignedNumberType"
+- !private "Ps10Strideable"
+- !private "Sp"
+- !private "P10Foundation13_BitShiftable"
+- !private "Ps33_BuiltinBooleanLiteralConvertible"
+- !private "Ps33_BuiltinIntegerLiteralConvertible"
+- !private "Ps14_Incrementable"
+- !private "Ps22_IntegerArithmeticType"
+- !private "P10Foundation12_IntegerLike"
+- !private "Ps12_IntegerType"
+- !private "P10Foundation21_ObjectiveCBridgeable"
+- !private "Ps12_PointerType"
+- !private "Ps22_RandomAccessAmbiguity"
+- !private "Ps12_Reflectable"
+- !private "Ps18_SignedIntegerType"
+depends-dynamic-lookup:
+depends-external:
+- "/usr/lib/swift/linux/x86_64/Swift.swiftmodule"
+- "/usr/lib/swift/shims/UnicodeShims.h"
+- "/usr/lib/swift/shims/SwiftStdint.h"
+- "/usr/lib/swift/shims/SwiftStddef.h"
+- "/usr/lib/swift/shims/LibcShims.h"
+- "/usr/lib/swift/shims/RuntimeStubs.h"
+- "/usr/lib/swift/shims/RuntimeShims.h"
+- "/usr/lib/swift/shims/RefCount.h"
+- "/usr/lib/swift/shims/HeapObject.h"
+- "/usr/lib/swift/shims/GlobalObjects.h"
+- "/usr/lib/swift/shims/FoundationShims.h"
+- "/usr/lib/swift/shims/CoreFoundationShims.h"
+- "/usr/lib/swift/shims/module.map"
+- "/usr/lib/swift/linux/x86_64/Foundation.swiftmodule"
+- "/usr/lib/swift/linux/x86_64/Glibc.swiftmodule"
+interface-hash: "e0bf1b9d3064b92f0cbb5947ad25427e"

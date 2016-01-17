@@ -1,0 +1,5 @@
+module SwiftCWrapper [system] {
+    header "/usr/local/include/UnavailableCFunctions.h"
+    link "swiftcwrapper"
+    export *
+}

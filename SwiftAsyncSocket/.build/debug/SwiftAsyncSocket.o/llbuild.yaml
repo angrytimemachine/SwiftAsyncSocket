@@ -1,0 +1,29 @@
+client:
+  name: swift-build
+
+tools: {}
+
+targets:
+  "": [<SwiftAsyncSocket>]
+  SwiftAsyncSocket: [<SwiftAsyncSocket>]
+
+commands:
+  <SwiftAsyncSocket-swiftc>:
+    tool: swift-compiler
+    executable: "/usr/bin/swiftc"
+    inputs: ["/SwiftAsyncSocket/Sources/AutoreleasingMutableBufferPointer.swift","/SwiftAsyncSocket/Sources/GCDAsyncReadPacket.swift","/SwiftAsyncSocket/Sources/GCDAsyncSocket.swift","/SwiftAsyncSocket/Sources/GCDAsyncSocketPreBuffer.swift","/SwiftAsyncSocket/Sources/GCDAsyncSpecialPacket.swift","/SwiftAsyncSocket/Sources/GCDAsyncWritePacket.swift"]
+    outputs: ["<SwiftAsyncSocket-swiftc>","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.swiftmodule","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/AutoreleasingMutableBufferPointer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncReadPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocketPreBuffer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSpecialPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncWritePacket.swift.o"]
+    module-name: "SwiftAsyncSocket"
+    module-output-path: "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.swiftmodule"
+    is-library: true
+    sources: ["/SwiftAsyncSocket/Sources/AutoreleasingMutableBufferPointer.swift","/SwiftAsyncSocket/Sources/GCDAsyncReadPacket.swift","/SwiftAsyncSocket/Sources/GCDAsyncSocket.swift","/SwiftAsyncSocket/Sources/GCDAsyncSocketPreBuffer.swift","/SwiftAsyncSocket/Sources/GCDAsyncSpecialPacket.swift","/SwiftAsyncSocket/Sources/GCDAsyncWritePacket.swift"]
+    objects: ["/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/AutoreleasingMutableBufferPointer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncReadPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocketPreBuffer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSpecialPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncWritePacket.swift.o"]
+    import-paths: ["/SwiftAsyncSocket/.build/debug"]
+    temps-path: "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket"
+    other-args: ["-j8","-Onone","-g","-enable-testing","-I","/usr/local/include"]
+  <SwiftAsyncSocket>:
+    tool: shell
+    inputs: ["<SwiftAsyncSocket-swiftc>","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/AutoreleasingMutableBufferPointer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncReadPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocketPreBuffer.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSpecialPacket.swift.o","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncWritePacket.swift.o"]
+    outputs: ["<SwiftAsyncSocket>","/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.a"]
+    args: ["/bin/sh","-c","rm -f '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.a'; ar cr '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.a' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/AutoreleasingMutableBufferPointer.swift.o' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncReadPacket.swift.o' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocket.swift.o' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocketPreBuffer.swift.o' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSpecialPacket.swift.o' '/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncWritePacket.swift.o'"]
+    description: "Linking Library:  /SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.a"

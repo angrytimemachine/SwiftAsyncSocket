@@ -1,0 +1,41 @@
+{
+  "": {
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/master.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/AutoreleasingMutableBufferPointer.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/AutoreleasingMutableBufferPointer.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/AutoreleasingMutableBufferPointer.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/AutoreleasingMutableBufferPointer~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/AutoreleasingMutableBufferPointer.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/GCDAsyncReadPacket.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncReadPacket.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncReadPacket.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncReadPacket~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncReadPacket.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/GCDAsyncSocket.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocket.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocket.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocket~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocket.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/GCDAsyncSocketPreBuffer.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocketPreBuffer.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSocketPreBuffer.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocketPreBuffer~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSocketPreBuffer.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/GCDAsyncSpecialPacket.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSpecialPacket.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncSpecialPacket.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSpecialPacket~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncSpecialPacket.swiftdeps"
+  },
+  "/SwiftAsyncSocket/Sources/GCDAsyncWritePacket.swift": {
+    "dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncWritePacket.d",
+    "object": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/Sources/GCDAsyncWritePacket.swift.o",
+    "swiftmodule": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncWritePacket~partial.swiftmodule",
+    "swift-dependencies": "/SwiftAsyncSocket/.build/debug/SwiftAsyncSocket.o/SwiftAsyncSocket/GCDAsyncWritePacket.swiftdeps"
+  }
+}

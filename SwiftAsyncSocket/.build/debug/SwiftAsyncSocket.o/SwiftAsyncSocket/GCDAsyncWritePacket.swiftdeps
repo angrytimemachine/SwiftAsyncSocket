@@ -1,0 +1,50 @@
+### Swift dependencies file v0 ###
+provides-top-level:
+- "GCDAsyncWritePacket"
+provides-nominal:
+- "C16SwiftAsyncSocket19GCDAsyncWritePacket"
+provides-member:
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", ""]
+depends-top-level:
+- !private "IntegerLiteralType"
+- "GCDAsyncWritePacket"
+- !private "FloatLiteralType"
+- "NSMutableData"
+- "Int"
+- "NSTimeInterval"
+depends-member:
+- !private ["Ps9AnyObject", "buffer"]
+- !private ["Ps9AnyObject", "bytesDone"]
+- !private ["Ps9AnyObject", "tag"]
+- !private ["Ps9AnyObject", "timeout"]
+- ["Ps9AnyObject", ""]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "Int"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "NSMutableData"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "NSTimeInterval"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "buffer"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "bytesDone"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "deinit"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "init"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "tag"]
+- ["C16SwiftAsyncSocket19GCDAsyncWritePacket", "timeout"]
+depends-nominal:
+- "Ps9AnyObject"
+- "C16SwiftAsyncSocket19GCDAsyncWritePacket"
+depends-dynamic-lookup:
+depends-external:
+- "/usr/lib/swift/linux/x86_64/Swift.swiftmodule"
+- "/usr/lib/swift/shims/UnicodeShims.h"
+- "/usr/lib/swift/shims/SwiftStdint.h"
+- "/usr/lib/swift/shims/SwiftStddef.h"
+- "/usr/lib/swift/shims/LibcShims.h"
+- "/usr/lib/swift/shims/RuntimeStubs.h"
+- "/usr/lib/swift/shims/RuntimeShims.h"
+- "/usr/lib/swift/shims/RefCount.h"
+- "/usr/lib/swift/shims/HeapObject.h"
+- "/usr/lib/swift/shims/GlobalObjects.h"
+- "/usr/lib/swift/shims/FoundationShims.h"
+- "/usr/lib/swift/shims/CoreFoundationShims.h"
+- "/usr/lib/swift/shims/module.map"
+- "/usr/lib/swift/linux/x86_64/Foundation.swiftmodule"
+- "/usr/lib/swift/linux/x86_64/Glibc.swiftmodule"
+interface-hash: "f9202de7e7c413c085de318e5bc4f99b"

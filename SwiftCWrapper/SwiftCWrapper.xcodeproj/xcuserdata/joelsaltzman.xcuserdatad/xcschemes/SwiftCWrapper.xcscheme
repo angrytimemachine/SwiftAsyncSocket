@@ -14,10 +14,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3835AA631C433B580055A53B"
-               BuildableName = "SwiftAsyncSocket.framework"
-               BlueprintName = "SwiftAsyncSocket"
-               ReferencedContainer = "container:SwiftAsyncSocket.xcodeproj">
+               BlueprintIdentifier = "380D9D921C4B171700FC9D07"
+               BuildableName = "SwiftCWrapper.framework"
+               BlueprintName = "SwiftCWrapper"
+               ReferencedContainer = "container:SwiftCWrapper.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -28,26 +28,7 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3835AA6D1C433B580055A53B"
-               BuildableName = "SwiftAsyncSocketTests.xctest"
-               BlueprintName = "SwiftAsyncSocketTests"
-               ReferencedContainer = "container:SwiftAsyncSocket.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
-      <MacroExpansion>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3835AA631C433B580055A53B"
-            BuildableName = "SwiftAsyncSocket.framework"
-            BlueprintName = "SwiftAsyncSocket"
-            ReferencedContainer = "container:SwiftAsyncSocket.xcodeproj">
-         </BuildableReference>
-      </MacroExpansion>
       <AdditionalOptions>
       </AdditionalOptions>
    </TestAction>
@@ -64,10 +45,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3835AA631C433B580055A53B"
-            BuildableName = "SwiftAsyncSocket.framework"
-            BlueprintName = "SwiftAsyncSocket"
-            ReferencedContainer = "container:SwiftAsyncSocket.xcodeproj">
+            BlueprintIdentifier = "380D9D921C4B171700FC9D07"
+            BuildableName = "SwiftCWrapper.framework"
+            BlueprintName = "SwiftCWrapper"
+            ReferencedContainer = "container:SwiftCWrapper.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <AdditionalOptions>
@@ -82,10 +63,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3835AA631C433B580055A53B"
-            BuildableName = "SwiftAsyncSocket.framework"
-            BlueprintName = "SwiftAsyncSocket"
-            ReferencedContainer = "container:SwiftAsyncSocket.xcodeproj">
+            BlueprintIdentifier = "380D9D921C4B171700FC9D07"
+            BuildableName = "SwiftCWrapper.framework"
+            BlueprintName = "SwiftCWrapper"
+            ReferencedContainer = "container:SwiftCWrapper.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
    </ProfileAction>
