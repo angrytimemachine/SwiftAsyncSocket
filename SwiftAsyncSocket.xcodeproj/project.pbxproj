@@ -16,6 +16,7 @@
 		3835AA891C43522E0055A53B /* GCDAsyncReadPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */; };
 		3835AA8B1C4352440055A53B /* GCDAsyncWritePacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */; };
 		3835AA8D1C43525C0055A53B /* GCDAsyncSpecialPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */; };
+		38D6E8B21C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,6 +42,7 @@
 		3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncReadPacket.swift; sourceTree = "<group>"; };
 		3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncWritePacket.swift; sourceTree = "<group>"; };
 		3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSpecialPacket.swift; sourceTree = "<group>"; };
+		38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocketDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +111,7 @@
 				3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */,
 				3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */,
 				3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */,
+				38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -221,6 +224,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3835AA841C433F7E0055A53B /* GCDAsyncSocket.swift in Sources */,
+				38D6E8B21C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift in Sources */,
 				3835AA8D1C43525C0055A53B /* GCDAsyncSpecialPacket.swift in Sources */,
 				3835AA871C4352160055A53B /* GCDAsyncSocketPreBuffer.swift in Sources */,
 				3835AA7F1C433ECD0055A53B /* Package.swift in Sources */,

@@ -78,13 +78,28 @@ enum GCDAsyncSocketError: ErrorType {
 }
 
 
-
+/**
+ * GCDAsyncSocket uses the standard delegate paradigm,
+ * but executes all delegate callbacks on a given delegate dispatch queue.
+ * This allows for maximum concurrency, while at the same time providing easy thread safety.
+ *
+ * You MUST set a delegate AND delegate dispatch queue before attempting to
+ * use the socket, or you will get an error.
+ *
+ * The socket queue is optional.
+ * If you pass NULL, GCDAsyncSocket will automatically create it's own socket queue.
+ * If you choose to provide a socket queue, the socket queue must not be a concurrent queue.
+ * If you choose to provide a socket queue, and the socket queue has a configured target queue,
+ * then please see the discussion for the method markSocketQueueTargetQueue.
+ *
+ * The delegate queue and socket queue can optionally be the same.
+ **/
 class GCDAsyncSocket {
     var flags  = [GCDAsyncSocketFlags]()
     var config = [GCDAsyncSocketConfig]()
     
-    var socket4FD : Int32 = SOCKET_NULL
-    var socket6FD : Int32 = SOCKET_NULL
+    var _socket4FD : Int32 = SOCKET_NULL
+    var _socket6FD : Int32 = SOCKET_NULL
     var socketUN : Int32 = SOCKET_NULL
     var socketUrl : NSURL? = nil
     var stateIndex : Int = 0
@@ -118,7 +133,7 @@ class GCDAsyncSocket {
     var readStream : CFReadStreamRef
     var writeStream : CFWriteStreamRef
     #endif
-    var sslContext : SSLContextRef? = nil
+    var _sslContext : SSLContextRef? = nil
     var sslPreBuffer : GCDAsyncSocketPreBuffer? = nil
     var sslWriteCachedLength : size_t = 0
     var sslErrCode : OSStatus = 0
@@ -127,7 +142,7 @@ class GCDAsyncSocket {
 //    var IsOnSocketQueueOrTargetQueueKey : UnsafeMutablePointer<Void>
     
     
-    weak var _delegate : AnyObject? = nil
+    weak var _delegate : GCDAsyncSocketDelegate? = nil
     var delegate : AnyObject?
         {
         get {
@@ -144,7 +159,7 @@ class GCDAsyncSocket {
             return result
         }
     }
-    func setDelegate(newDelegate : AnyObject?, synchronously : Bool){
+    func setDelegate(newDelegate : GCDAsyncSocketDelegate?, synchronously : Bool){
         let block = {
             self._delegate = newDelegate
         }
@@ -160,10 +175,14 @@ class GCDAsyncSocket {
             }
         }
     }
-    func setDelegate(newDelegate : AnyObject?) {
+    func setDelegate(newDelegate : GCDAsyncSocketDelegate?) {
         setDelegate(newDelegate, synchronously: false)
     }
-    func synchronouslySetDelegate(newDelegate : AnyObject?) {
+    /**
+     * If you are setting the delegate to nil within the delegate's dealloc method,
+     * you may need to use the synchronous versions below.
+     **/
+    func synchronouslySetDelegate(newDelegate : GCDAsyncSocketDelegate?) {
         setDelegate(newDelegate, synchronously: true)
     }
     
@@ -211,18 +230,18 @@ class GCDAsyncSocket {
     func synchronouslySetDelegateQueue(newDelegateQueue : dispatch_queue_t?) {
         setDelegateQueue(newDelegateQueue, synchronously: true)
     }
-    func getDelegate(inout delegatePtr : UnsafeMutablePointer<AnyObject?>, inout delegateQueuePtr : UnsafeMutablePointer<dispatch_queue_t?>){
+    func getDelegate(inout delegatePtr : UnsafeMutablePointer<GCDAsyncSocketDelegate?>, inout delegateQueuePtr : UnsafeMutablePointer<dispatch_queue_t?>){
         let block = {
             var d = self._delegate
             if delegatePtr != nil {
-                withUnsafeMutablePointer(&d) { v in
-                    delegatePtr = v
+                withUnsafeMutablePointer(&d) {
+                    delegatePtr = $0
                 }
             }
             var dq = self._delegateQueue
             if delegateQueuePtr != nil {
-                withUnsafeMutablePointer(&dq) { v in
-                    delegateQueuePtr = v
+                withUnsafeMutablePointer(&dq) {
+                    delegateQueuePtr = $0
                 }
             }
         }
@@ -233,7 +252,7 @@ class GCDAsyncSocket {
             dispatch_sync(socketQueue, block)
         }
     }
-    func setDelegate(newDelegate : AnyObject?, newDelegateQueue : dispatch_queue_t?, synchronously : Bool ){
+    func setDelegate(newDelegate : GCDAsyncSocketDelegate?, newDelegateQueue : dispatch_queue_t?, synchronously : Bool ){
         let block = {
             self._delegate = newDelegate
             
@@ -256,12 +275,25 @@ class GCDAsyncSocket {
         }
         
     }
-    func setDelegate(newDelegate : AnyObject?, delegateQueue newDelegateQueue : dispatch_queue_t?){
+    func setDelegate(newDelegate : GCDAsyncSocketDelegate?, delegateQueue newDelegateQueue : dispatch_queue_t?){
         setDelegate(newDelegate, newDelegateQueue: newDelegateQueue, synchronously: false)
     }
-    func synchronouslySetDelegate(newDelegate : AnyObject?, delegateQueue newDelegateQueue : dispatch_queue_t?){
+    func synchronouslySetDelegate(newDelegate : GCDAsyncSocketDelegate?, delegateQueue newDelegateQueue : dispatch_queue_t?){
         setDelegate(newDelegate, newDelegateQueue: newDelegateQueue, synchronously: true)
     }
+    
+    /**
+     * By default, both IPv4 and IPv6 are enabled.
+     *
+     * For accepting incoming connections, this means GCDAsyncSocket automatically supports both protocols,
+     * and can simulataneously accept incoming connections on either protocol.
+     *
+     * For outgoing connections, this means GCDAsyncSocket can connect to remote hosts running either protocol.
+     * If a DNS lookup returns only IPv4 results, GCDAsyncSocket will automatically use IPv4.
+     * If a DNS lookup returns only IPv6 results, GCDAsyncSocket will automatically use IPv6.
+     * If a DNS lookup returns both IPv4 and IPv6 results, the preferred protocol will be chosen.
+     * By default, the preferred protocol is IPv4, but may be configured as desired.
+     **/
     func isIPv4Enabled() -> Bool {
         var result = false
         // Note: YES means IPv4Disabled is OFF
@@ -360,6 +392,11 @@ class GCDAsyncSocket {
             dispatch_async(socketQueue, block)
         }
     }
+    
+    /**
+     * User data allows you to associate arbitrary information with the socket.
+     * This data is not used internally by socket in any way.
+     **/
     var _userData : AnyObject? = nil
     var userData : AnyObject?
         {
@@ -390,7 +427,7 @@ class GCDAsyncSocket {
         }
     }
     
-    init(withDelegate aDelegate : AnyObject?, delegateQueue dq : dispatch_queue_t?, socketQueue aSocketQueue : dispatch_queue_t!) {
+    init(withDelegate aDelegate : GCDAsyncSocketDelegate?, delegateQueue dq : dispatch_queue_t?, socketQueue aSocketQueue : dispatch_queue_t!) {
         if let sq = aSocketQueue {
             assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), "The given socketQueue parameter must not be a concurrent queue.");
             assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), "The given socketQueue parameter must not be a concurrent queue.");
@@ -441,8 +478,8 @@ class GCDAsyncSocket {
 //        let context = UnsafeMutablePointer<GCDAsyncSocket>.alloc(1)
 //        context.initialize(self)
         var selfPtr = self
-        withUnsafeMutablePointer(&selfPtr) { v in
-            dispatch_queue_set_specific(socketQueue, GCDAsyncSocketQueueName, v, nil);
+        withUnsafeMutablePointer(&selfPtr) {
+            dispatch_queue_set_specific(socketQueue, GCDAsyncSocketQueueName, $0, nil);
         }
 
         preBuffer = GCDAsyncSocketPreBuffer.init(withCapacity: 1024 * 4)
@@ -454,7 +491,7 @@ class GCDAsyncSocket {
     convenience init(withSocketQueue sq: dispatch_queue_t) {
         self.init(withDelegate:.None, delegateQueue:.None, socketQueue:sq)
     }
-    convenience init(withDelegate aDelegate : AnyObject, withDelegateQueue dq: dispatch_queue_t) {
+    convenience init(withDelegate aDelegate : GCDAsyncSocketDelegate, withDelegateQueue dq: dispatch_queue_t) {
         self.init(withDelegate:aDelegate, delegateQueue:dq, socketQueue:.None)
     }
     
@@ -491,9 +528,19 @@ class GCDAsyncSocket {
      /***********************************************************/
      // MARK: Accepting
      /***********************************************************/
+    
+     /**
+     * Tells the socket to begin listening and accepting connections on the given port.
+     * When a connection is accepted, a new instance of GCDAsyncSocket will be spawned to handle it,
+     * and the socket:didAcceptNewSocket: delegate method will be invoked.
+     *
+     * The socket will listen on all available interfaces (e.g. wifi, ethernet, etc)
+     **/
     func acceptOnPort(port : UInt16) throws {
         try acceptOnInterface(nil, port: port)
     }
+    
+    
     /*!
     * @function acceptOnInterface
     *
@@ -507,6 +554,22 @@ class GCDAsyncSocket {
     *
     * @throw GCDAsyncSocketError
     */
+    /**
+    * This method is the same as acceptOnPort:error: with the
+    * additional option of specifying which interface to listen on.
+    *
+    * For example, you could specify that the socket should only accept connections over ethernet,
+    * and not other interfaces such as wifi.
+    *
+    * The interface may be specified by name (e.g. "en1" or "lo0") or by IP address (e.g. "192.168.4.34").
+    * You may also use the special strings "localhost" or "loopback" to specify that
+    * the socket only accept connections from the local machine.
+    *
+    * You can see the list of interfaces via the command line utility "ifconfig",
+    * or programmatically via the getifaddrs() function.
+    *
+    * To accept connections on any interface pass nil, or simply use the acceptOnPort:error: method.
+    **/
     func acceptOnInterface(inputInterface : String?, port : UInt16) throws {
 
         let interface = inputInterface != nil ? inputInterface! : ""
@@ -543,10 +606,10 @@ class GCDAsyncSocket {
         
         // Create dispatch block and run on socketQueue
         let block = {
-            guard let d = self._delegate else {
+            guard let _ = self._delegate else {
                 throw GCDAsyncSocketError.BadConfigError(message: "Attempting to accept without a delegate. Set a delegate first.")
             }
-            guard let dq = self._delegateQueue else {
+            guard let _ = self._delegateQueue else {
                 throw GCDAsyncSocketError.BadConfigError(message: "Attempting to accept without a delegate queue. Set a delegate queue first.")
             }
             let isIPv4Disabled = self.config.contains(.IPv4Disabled)
@@ -583,51 +646,370 @@ class GCDAsyncSocket {
             
             // Create sockets, configure, bind, and listen
             if enableIPv4 {
-                self.socket4FD = try createSocket(AF_INET, interface4)
-                if self.socket4FD == SOCKET_NULL {
+                self._socket4FD = try createSocket(AF_INET, interface4)
+                if self._socket4FD == SOCKET_NULL {
                     return
                 }
             }
             
             if enableIPv6 {
                 if enableIPv4 && port == 0 {
+                    //!!!: implement localPort4
                     // No specific port was specified, so we allowed the OS to pick an available port for us.
                     // Now we need to make sure the IPv6 socket listens on the same port as the IPv4 socket.
-//                    struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)[interface6 mutableBytes];
-//                    addr6->sin6_port = htons([self localPort4]);
+                    
+                    var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6.mutableBytes).memory
+//                    addr6.sin6_port = htons([self localPort4]);
                 }
-                self.socket6FD = try createSocket(AF_INET6, interface6)
-                if self.socket6FD == SOCKET_NULL {
-                    if self.socket4FD != SOCKET_NULL {
-                        swift_close(self.socket4FD)
+                self._socket6FD = try createSocket(AF_INET6, interface6)
+                if self._socket6FD == SOCKET_NULL {
+                    if self._socket4FD != SOCKET_NULL {
+                        swift_close(self._socket4FD)
                         return
                     }
                 }
             }
             
             // Create accept sources
+            var socketFD = SOCKET_NULL
+            var source : dispatch_source_t? = nil
             if enableIPv4 {
-//                accept4Source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, self.socket4FD, 0 self.socketQueue)
+                self.accept4Source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(self._socket4FD), 0, self.socketQueue)
+                source = self.accept4Source
+                socketFD = self._socket4FD
+            } else if enableIPv6 {
+                self.accept6Source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(self._socket6FD), 0, self.socketQueue)
+                source = self.accept6Source
+                socketFD = self._socket6FD
+            }
+            
+            
+            
+            if let acceptSource = source {
+                weak var weakSelf = self
                 
+                dispatch_source_set_event_handler(acceptSource)  {
+                    autoreleasepool{
+                        guard let strongSelf = weakSelf else {
+                            return;
+                        }
+                        
+                        var i : UInt = 0
+                        let numPendingConnections = dispatch_source_get_data(acceptSource)
+                        while strongSelf.doAccept(socketFD) && (++i < numPendingConnections) {
+                            
+                        }
+                    }
+                }
                 
+                dispatch_source_set_cancel_handler(acceptSource){
+                    //always using ARC, don't need this
+//                        if !OS_OBJECT_USE_OBJC
+//                        dispatch_release(acceptSource);
+//                        #endif
+                    swift_close(socketFD)
+                }
+                
+                dispatch_resume(acceptSource)
+                self.flags.append(.SocketStarted)
             }
             
         }
         
-//        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
-//            block()
-//        } else {
-//            dispatch_sync(socketQueue, block)
-//        }
-        
-        if let err = error {
-            throw err
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            try block()
+        } else {
+            var error : ErrorType? = nil
+            dispatch_sync(socketQueue){
+                do {
+                    try block()
+                } catch let e  {
+                    error = e
+                }
+            }
+            if let e = error {
+                throw e
+            }
         }
+    }
+    /**
+     * Tells the socket to begin listening and accepting connections on the unix domain at the given url.
+     * When a connection is accepted, a new instance of GCDAsyncSocket will be spawned to handle it,
+     * and the socket:didAcceptNewSocket: delegate method will be invoked.
+     *
+     * The socket will listen on all available interfaces (e.g. wifi, ethernet, etc)
+     **/
+    func acceptOnUrl(url : NSURL) throws -> Bool {
+        return true
+    }
+    func doAccept(parentSocketFD : Int32) -> Bool {
+        
+        var socketType = -1
+        var childSocketFD = SOCKET_NULL
+        var childSocketAddress : NSData? = nil
+        
+        
+        if parentSocketFD == _socket4FD {
+            socketType = 0
+            var addr4 = sockaddr()
+            var addr4Len = socklen_t(sizeofValue(addr4))
+            
+            childSocketFD = withUnsafeMutablePointer(&addr4){
+                accept(parentSocketFD, $0, &addr4Len)
+            }
+            
+            guard childSocketFD != -1 else {
+                print("accept() failed with error \(strerror(errno))")
+                return false;
+            }
+            
+            childSocketAddress = NSData.init(bytes: &addr4, length: Int(addr4Len))
+        }
+        else if parentSocketFD == _socket6FD {
+            
+            socketType = 1
+            var addr6 = sockaddr_in6()
+            var addr6Len = socklen_t(sizeofValue(addr6))
+            
+            childSocketFD = withUnsafeMutablePointer(&addr6){ (addrPtr) -> Int32 in
+                withUnsafeMutablePointer(&addr6Len){ (addrLenPtr) -> Int32 in
+                    accept(parentSocketFD, UnsafeMutablePointer(addrPtr), UnsafeMutablePointer(addrLenPtr))
+                }
+            }
+            
+            guard childSocketFD != -1 else {
+                print("accept() failed with error \(strerror(errno))")
+                return false;
+            }
+            
+            childSocketAddress = NSData.init(bytes: &addr6, length: Int(addr6Len))
+        }
+        else // if (parentSocketFD == socketUN)
+        {
+            socketType = 2;
+            
+            var addrUn = sockaddr_un()
+            var addrUnLen = socklen_t(sizeofValue(addrUn))
+            
+            childSocketFD = withUnsafeMutablePointer(&addrUn){ (addrPtr) -> Int32 in
+                withUnsafeMutablePointer(&addrUnLen){ (addrLenPtr) -> Int32 in
+                    accept(parentSocketFD, UnsafeMutablePointer(addrPtr), UnsafeMutablePointer(addrLenPtr))
+                }
+            }
+            
+            guard childSocketFD != -1 else {
+                print("accept() failed with error \(strerror(errno))")
+                return false;
+            }
+            
+            childSocketAddress = NSData.init(bytes: &addrUn, length: Int(addrUnLen))
+        }
+        
+        // Enable non-blocking IO on the socket
+        guard swift_fcntl(childSocketFD, F_SETFL, O_NONBLOCK) != -1 else {
+            print("WARNING: Error enabling non-blocking IO on accepted socket (fcntl)")
+            return false
+        }
+        // Prevent SIGPIPE signals
+        var nosigpipe = 1
+        setsockopt(childSocketFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, socklen_t(sizeofValue(nosigpipe)))
+        
+        // Notify delegate
+        if let d = _delegate, let dq = _delegateQueue, let csa = childSocketAddress {
+            dispatch_async(dq){
+                autoreleasepool {
+                    // Query delegate for custom socket queue
+                    if let childSocketQueue = d.newSocketQueueForConnection(fromAddress:csa, onSocket:self) {
+                        let acceptedSocket = GCDAsyncSocket.init(withDelegate: self._delegate, delegateQueue: self._delegateQueue, socketQueue: childSocketQueue)
+                        switch socketType {
+                        case 0:
+                            acceptedSocket._socket4FD = childSocketFD
+                        case 1:
+                            acceptedSocket._socket6FD = childSocketFD
+                        default:
+                            acceptedSocket.socketUN = childSocketFD
+                        }
+                        acceptedSocket.flags.append(.Connected)
+                        
+                        // Setup read and write sources for accepted socket
+                        
+                        dispatch_async(acceptedSocket.socketQueue){
+                            //!!!: implement setupReadAndWriteSourcesForNewlyConnectedSocket
+//                            acceptedSocket.setupReadAndWriteSourcesForNewlyConnectedSocket(childSocketFD)
+                        }
+                        
+                        // Notify delegate
+                        d.socket(self, didAcceptNewSocket: acceptedSocket)
+
+                        //always using ARC, don't need this
+//                        // Release the socket queue returned from the delegate (it was retained by acceptedSocket)
+//                        #if !OS_OBJECT_USE_OBJC
+//                            if (childSocketQueue) dispatch_release(childSocketQueue);
+//                        #endif
+                        
+                        // The accepted socket should have been retained by the delegate.
+                        // Otherwise it gets properly released when exiting the block.
+                    }
+                }
+            }
+        }
+        return true
     }
     
      /***********************************************************/
      // MARK: Connecting
      /***********************************************************/
+    func preConnectWithInterface(interface:String) throws -> Bool {
+        return true
+    }
+    func preConnectWithUrl(url:String) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the given host and port.
+     *
+     * This method invokes connectToHost:onPort:viaInterface:withTimeout:error:
+     * and uses the default interface, and no timeout.
+     **/
+    func connectToHost(host:String, onPort port:UInt16) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the given host and port with an optional timeout.
+     *
+     * This method invokes connectToHost:onPort:viaInterface:withTimeout:error: and uses the default interface.
+     **/
+    func connectToHost(host:String, onPort port:UInt16, withTimeout timeout:NSTimeInterval) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the given host & port, via the optional interface, with an optional timeout.
+     *
+     * The host may be a domain name (e.g. "deusty.com") or an IP address string (e.g. "192.168.0.2").
+     * The host may also be the special strings "localhost" or "loopback" to specify connecting
+     * to a service on the local machine.
+     *
+     * The interface may be a name (e.g. "en1" or "lo0") or the corresponding IP address (e.g. "192.168.4.35").
+     * The interface may also be used to specify the local port (see below).
+     *
+     * To not time out use a negative time interval.
+     *
+     * This method will return NO if an error is detected, and set the error pointer (if one was given).
+     * Possible errors would be a nil host, invalid interface, or socket is already connected.
+     *
+     * If no errors are detected, this method will start a background connect operation and immediately return YES.
+     * The delegate callbacks are used to notify you when the socket connects, or if the host was unreachable.
+     *
+     * Since this class supports queued reads and writes, you can immediately start reading and/or writing.
+     * All read/write operations will be queued, and upon socket connection,
+     * the operations will be dequeued and processed in order.
+     *
+     * The interface may optionally contain a port number at the end of the string, separated by a colon.
+     * This allows you to specify the local port that should be used for the outgoing connection. (read paragraph to end)
+     * To specify both interface and local port: "en1:8082" or "192.168.4.35:2424".
+     * To specify only local port: ":8082".
+     * Please note this is an advanced feature, and is somewhat hidden on purpose.
+     * You should understand that 99.999% of the time you should NOT specify the local port for an outgoing connection.
+     * If you think you need to, there is a very good chance you have a fundamental misunderstanding somewhere.
+     * Local ports do NOT need to match remote ports. In fact, they almost never do.
+     * This feature is here for networking professionals using very advanced techniques.
+     **/
+    func connectToHost(host:String, onPort port:UInt16, viaInterface inInterface:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the given address, specified as a sockaddr structure wrapped in a NSData object.
+     * For example, a NSData object returned from NSNetService's addresses method.
+     *
+     * If you have an existing struct sockaddr you can convert it to a NSData object like so:
+     * struct sockaddr sa  -> NSData *dsa = [NSData dataWithBytes:&remoteAddr length:remoteAddr.sa_len];
+     * struct sockaddr *sa -> NSData *dsa = [NSData dataWithBytes:remoteAddr length:remoteAddr->sa_len];
+     *
+     * This method invokes connectToAdd
+     **/
+    func connectToAddress(remoteAddr:String) throws -> Bool {
+        return true
+    }
+    /**
+     * This method is the same as connectToAddress:error: with an additional timeout option.
+     * To not time out use a negative time interval, or simply use the connectToAddress:error: method.
+     **/
+    func connectToAddress(remoteAddr:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the given address, using the specified interface and timeout.
+     *
+     * The address is specified as a sockaddr structure wrapped in a NSData object.
+     * For example, a NSData object returned from NSNetService's addresses method.
+     *
+     * If you have an existing struct sockaddr you can convert it to a NSData object like so:
+     * struct sockaddr sa  -> NSData *dsa = [NSData dataWithBytes:&remoteAddr length:remoteAddr.sa_len];
+     * struct sockaddr *sa -> NSData *dsa = [NSData dataWithBytes:remoteAddr length:remoteAddr->sa_len];
+     *
+     * The interface may be a name (e.g. "en1" or "lo0") or the corresponding IP address (e.g. "192.168.4.35").
+     * The interface may also be used to specify the local port (see below).
+     *
+     * The timeout is optional. To not time out use a negative time interval.
+     *
+     * This method will return NO if an error is detected, and set the error pointer (if one was given).
+     * Possible errors would be a nil host, invalid interface, or socket is already connected.
+     *
+     * If no errors are detected, this method will start a background connect operation and immediately return YES.
+     * The delegate callbacks are used to notify you when the socket connects, or if the host was unreachable.
+     *
+     * Since this class supports queued reads and writes, you can immediately start reading and/or writing.
+     * All read/write operations will be queued, and upon socket connection,
+     * the operations will be dequeued and processed in order.
+     *
+     * The interface may optionally contain a port number at the end of the string, separated by a colon.
+     * This allows you to specify the local port that should be used for the outgoing connection. (read paragraph to end)
+     * To specify both interface and local port: "en1:8082" or "192.168.4.35:2424".
+     * To specify only local port: ":8082".
+     * Please note this is an advanced feature, and is somewhat hidden on purpose.
+     * You should understand that 99.999% of the time you should NOT specify the local port for an outgoing connection.
+     * If you think you need to, there is a very good chance you have a fundamental misunderstanding somewhere.
+     * Local ports do NOT need to match remote ports. In fact, they almost never do.
+     * This feature is here for networking professionals using very advanced techniques.
+     **/
+    func connectToAddress(remoteAddr:String, viaInterace inInterface:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
+        return true
+    }
+    /**
+     * Connects to the unix domain socket at the given url, using the specified timeout.
+     */
+    func connectToUrl(url:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
+        return true
+    }
+    func lookupDidSucceed(stateIndex:Int, WithAddress4 address4:NSData?, address6:NSData?) {
+        
+    }
+    /**
+     * This method is called if the DNS lookup fails.
+     * This method is executed on the socketQueue.
+     *
+     * Since the DNS lookup executed synchronously on a global concurrent queue,
+     * the original connection request may have already been cancelled or timed-out by the time this method is invoked.
+     * The lookupIndex tells us whether the lookup is still valid or not.
+     **/
+    func lookupDidFail(stateIndex:Int) throws {
+        
+    }
+    func connectWithAddress4(address4:NSData?, address6:NSData?) throws -> Bool {
+        return true
+    }
+    func connectWithAddressUN(address:NSData?) throws -> Bool {
+        return true
+    }
+    func didConnect(stateIndex:Int) {
+        
+    }
+    func didNotConnect(stateIndex:Int) throws {
+        
+    }
+    func startConnectTimeout(timeout:NSTimeInterval) {
+        
+    }
     func endConnectTimeout() {
         if let timer = connectTimer {
             dispatch_source_cancel(timer)
@@ -647,28 +1029,198 @@ class GCDAsyncSocket {
             connectInterface6 = nil;
         }
     }
+    func doConnectTimeout() {
+        
+    }
+    
+    
     
      /***********************************************************/
      // MARK: Disconnecting
      /***********************************************************/
-    
-     /***********************************************************/
-     // MARK: Errors
-     /***********************************************************/
+    func close(withError error:GCDAsyncSocketError?) {
+//        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue");
+//        endConnectTimeout()
+//        
+//        if let cr = currentRead {
+//            //            endCurrentRead()
+//        }
+    }
+    /**
+     * Disconnects immediately (synchronously). Any pending reads or writes are dropped.
+     *
+     * If the socket is not already disconnected, an invocation to the socketDidDisconnect:withError: delegate method
+     * will be queued onto the delegateQueue asynchronously (behind any previously queued delegate methods).
+     * In other words, the disconnected delegate method will be invoked sometime shortly after this method returns.
+     *
+     * Please note the recommended way of releasing a GCDAsyncSocket instance (e.g. in a dealloc method)
+     * [asyncSocket setDelegate:nil];
+     * [asyncSocket disconnect];
+     * [asyncSocket release];
+     *
+     * If you plan on disconnecting the socket, and then immediately asking it to connect again,
+     * you'll likely want to do so like this:
+     * [asyncSocket setDelegate:nil];
+     * [asyncSocket disconnect];
+     * [asyncSocket setDelegate:self];
+     * [asyncSocket connect...];
+     **/
+    func disconnect() {
+        
+    }
+    /**
+     * Disconnects after all pending reads have completed.
+     * After calling this, the read and write methods will do nothing.
+     * The socket will disconnect even if there are still pending writes.
+     **/
+    func disconnectAfterReading() {
+        
+    }
+    /**
+     * Disconnects after all pending writes have completed.
+     * After calling this, the read and write methods will do nothing.
+     * The socket will disconnect even if there are still pending reads.
+     **/
+    func disconnectAfterWriting() {
+        
+    }
+    /**
+     * Disconnects after all pending reads and writes have completed.
+     * After calling this, the read and write methods will do nothing.
+     **/
+    func disconnectAfterReadingAndWriting() {
+        
+    }
+    /**
+     * Closes the socket if possible.
+     * That is, if all writes have completed, and we're set to disconnect after writing,
+     * or if all reads have completed, and we're set to disconnect after reading.
+     **/
+    func maybeClose() {
+        
+    }
+
     
      /***********************************************************/
      // MARK: Diagnostics
      /***********************************************************/
+     /**
+     * Returns whether the socket is disconnected or connected.
+     *
+     * A disconnected socket may be recycled.
+     * That is, it can used again for connecting or listening.
+     *
+     * If a socket is in the process of connecting, it may be neither disconnected nor connected.
+     **/
     func isDisconnected() -> Bool {
         return false
     }
-    func close(withError error: String?) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue");
-        endConnectTimeout()
-        
-        if let cr = currentRead {
-//            endCurrentRead()
-        }
+    func isConnected() -> Bool {
+        return false
+    }
+    
+    /**
+     * Returns the local or remote host and port to which this socket is connected, or nil and 0 if not connected.
+     * The host will be an IP address.
+     **/
+    func connectedHost() -> String {
+        return ""
+    }
+    func connectedPort() -> UInt16 {
+        return 0
+    }
+    func connectedUrl() -> NSURL? {
+        return nil
+    }
+    func localHost() -> String {
+        return ""
+    }
+    func localPort() -> UInt16 {
+        return 0
+    }
+    func connectedHost4() -> String {
+        return ""
+    }
+    func connectedHost6() -> String {
+        return ""
+    }
+    func connectedPort4() -> UInt16 {
+        return 0
+    }
+    func connectedPort6() -> UInt16 {
+        return 0
+    }
+    func localHost4() -> String {
+        return ""
+    }
+    func localHost6() -> String {
+        return ""
+    }
+    func localPort4() -> UInt16 {
+        return 0
+    }
+    func localPort6() -> UInt16 {
+        return 0
+    }
+    func connectedHostFromSocket4(socketFD : Int) -> String {
+        return ""
+    }
+    func connectedHostFromSocket6(socketFD : Int) -> String {
+        return ""
+    }
+    func connectedPortFromSocket4(socketFD : Int) -> UInt16 {
+        return 0
+    }
+    func connectedPortFromSocket6(socketFD : Int) -> UInt16 {
+        return 0
+    }
+    func connectedUrlFromSocketUN(socketFD : Int) -> NSURL? {
+        return nil
+    }
+    func localHostFromSocket4(socketFD : Int) -> String {
+        return ""
+    }
+    func localHostFromSocket6(socketFD : Int) -> String {
+        return ""
+    }
+    func localPortFromSocket4(socketFD : Int) -> UInt16 {
+        return 0
+    }
+    func localPortFromSocket6(socketFD : Int) -> UInt16 {
+        return 0
+    }
+    /**
+     * Returns the local or remote address to which this socket is connected,
+     * specified as a sockaddr structure wrapped in a NSData object.
+     *
+     * @seealso connectedHost
+     * @seealso connectedPort
+     * @seealso localHost
+     * @seealso localPort
+     **/
+    func connectedAddress() -> NSData? {
+        return nil
+    }
+    func localAddress() -> NSData? {
+        return nil
+    }
+    /**
+     * Returns whether the socket is IPv4 or IPv6.
+     * An accepting socket may be both.
+     **/
+    func isIPv4() -> Bool {
+        return false
+    }
+    func isIPv6() -> Bool {
+        return false
+    }
+    /**
+     * Returns whether or not the socket has been secured via SSL/TLS.
+     *
+     * See also the startTLS method.
+     **/
+    func isSecure() -> Bool {
+        return false
     }
      /***********************************************************/
      // MARK: Utilities
@@ -685,36 +1237,871 @@ class GCDAsyncSocket {
     func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData, inout address6 interfaceAddr6Ptr : NSMutableData, fromDescription interfaceDescription : String, port : UInt16) {
         
     }
+    func getInterfaceAddressFromUrl(url:NSURL) -> NSData? {
+        return nil
+    }
+    func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int) {
+        
+    }
+    func usingCFStreamForTLS() -> Bool {
+        return false
+    }
+    func usingSecureTransportForTLS() -> Bool {
+        return false
+    }
+    func suspendReadSource() {
+        
+    }
+    func resumeReadSource() {
+        
+    }
+    func suspendWriteSource() {
+        
+    }
+    func resumeWriteSource() {
+        
+    }
+    
      /***********************************************************/
-     // MARK: Read
+     // MARK: Reading
      /***********************************************************/
+     // The readData and writeData methods won't block (they are asynchronous).
+     //
+     // When a read is complete the socket:didReadData:withTag: delegate method is dispatched on the delegateQueue.
+     // When a write is complete the socket:didWriteDataWithTag: delegate method is dispatched on the delegateQueue.
+     //
+     // You may optionally set a timeout for any read/write operation. (To not timeout, use a negative time interval.)
+     // If a read/write opertion times out, the corresponding "socket:shouldTimeout..." delegate method
+     // is called to optionally allow you to extend the timeout.
+     // Upon a timeout, the "socket:didDisconnectWithError:" method is called
+     //
+     // The tag is for your convenience.
+     // You can use it as an array index, step number, state id, pointer, etc.
+     
+     /**
+     * Reads the first available bytes that become available on the socket.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     **/
+    func readDataWithTimeout(timeout:NSTimeInterval, tag:Int) {
+        
+    }
+    /**
+     * Reads the first available bytes that become available on the socket.
+     * The bytes will be appended to the given byte buffer starting at the given offset.
+     * The given buffer will automatically be increased in size if needed.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     * If the buffer if nil, the socket will create a buffer for you.
+     *
+     * If the bufferOffset is greater than the length of the given buffer,
+     * the method will do nothing, and the delegate will not be called.
+     *
+     * If you pass a buffer, you must not alter it in any way while the socket is using it.
+     * After completion, the data returned in socket:didReadData:withTag: will be a subset of the given buffer.
+     * That is, it will reference the bytes that were appended to the given buffer via
+     * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
+     **/
+    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
+        
+    }
+    /**
+     * Reads the first available bytes that become available on the socket.
+     * The bytes will be appended to the given byte buffer starting at the given offset.
+     * The given buffer will automatically be increased in size if needed.
+     * A maximum of length bytes will be read.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     * If the buffer if nil, a buffer will automatically be created for you.
+     * If maxLength is zero, no length restriction is enforced.
+     *
+     * If the bufferOffset is greater than the length of the given buffer,
+     * the method will do nothing, and the delegate will not be called.
+     *
+     * If you pass a buffer, you must not alter it in any way while the socket is using it.
+     * After completion, the data returned in socket:didReadData:withTag: will be a subset of the given buffer.
+     * That is, it will reference the bytes that were appended to the given buffer  via
+     * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
+     **/
+    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:UInt, maxLength:UInt, tag:Int) {
+        
+    }
+    /**
+     * Reads the given number of bytes.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     *
+     * If the length is 0, this method does nothing and the delegate is not called.
+     **/
+    func readDataToLength(length:UInt, withTimeout timeout:NSTimeInterval, tag:Int) {
+        
+    }
+    /**
+     * Reads the given number of bytes.
+     * The bytes will be appended to the given byte buffer starting at the given offset.
+     * The given buffer will automatically be increased in size if needed.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     * If the buffer if nil, a buffer will automatically be created for you.
+     *
+     * If the length is 0, this method does nothing and the delegate is not called.
+     * If the bufferOffset is greater than the length of the given buffer,
+     * the method will do nothing, and the delegate will not be called.
+     *
+     * If you pass a buffer, you must not alter it in any way while AsyncSocket is using it.
+     * After completion, the data returned in socket:didReadData:withTag: will be a subset of the given buffer.
+     * That is, it will reference the bytes that were appended to the given buffer via
+     * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
+     **/
+    func readDataToLength(length:UInt, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
+        
+    }
+    /**
+     * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     *
+     * If you pass nil or zero-length data as the "data" parameter,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     *
+     * To read a line from the socket, use the line separator (e.g. CRLF for HTTP, see below) as the "data" parameter.
+     * If you're developing your own custom protocol, be sure your separator can not occur naturally as
+     * part of the data between separators.
+     * For example, imagine you want to send several small documents over a socket.
+     * Using CRLF as a separator is likely unwise, as a CRLF could easily exist within the documents.
+     * In this particular example, it would be better to use a protocol similar to HTTP with
+     * a header that includes the length of the document.
+     * Also be careful that your separator cannot occur naturally as part of the encoding for a character.
+     *
+     * The given data (separator) parameter should be immutable.
+     * For performance reasons, the socket will retain it, not copy it.
+     * So if it is immutable, don't modify it while the socket is using it.
+     **/
+    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, tag:Int) {
+        
+    }
+    /**
+     * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
+     * The bytes will be appended to the given byte buffer starting at the given offset.
+     * The given buffer will automatically be increased in size if needed.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     * If the buffer if nil, a buffer will automatically be created for you.
+     *
+     * If the bufferOffset is greater than the length of the given buffer,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     *
+     * If you pass a buffer, you must not alter it in any way while the socket is using it.
+     * After completion, the data returned in socket:didReadData:withTag: will be a subset of the given buffer.
+     * That is, it will reference the bytes that were appended to the given buffer via
+     * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
+     *
+     * To read a line from the socket, use the line separator (e.g. CRLF for HTTP, see below) as the "data" parameter.
+     * If you're developing your own custom protocol, be sure your separator can not occur naturally as
+     * part of the data between separators.
+     * For example, imagine you want to send several small documents over a socket.
+     * Using CRLF as a separator is likely unwise, as a CRLF could easily exist within the documents.
+     * In this particular example, it would be better to use a protocol similar to HTTP with
+     * a header that includes the length of the document.
+     * Also be careful that your separator cannot occur naturally as part of the encoding for a character.
+     *
+     * The given data (separator) parameter should be immutable.
+     * For performance reasons, the socket will retain it, not copy it.
+     * So if it is immutable, don't modify it while the socket is using it.
+     **/
+    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
+        
+    }
+    /**
+     * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     *
+     * If maxLength is zero, no length restriction is enforced.
+     * Otherwise if maxLength bytes are read without completing the read,
+     * it is treated similarly to a timeout - the socket is closed with a GCDAsyncSocketReadMaxedOutError.
+     * The read will complete successfully if exactly maxLength bytes are read and the given data is found at the end.
+     *
+     * If you pass nil or zero-length data as the "data" parameter,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     * If you pass a maxLength parameter that is less than the length of the data parameter,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     *
+     * To read a line from the socket, use the line separator (e.g. CRLF for HTTP, see below) as the "data" parameter.
+     * If you're developing your own custom protocol, be sure your separator can not occur naturally as
+     * part of the data between separators.
+     * For example, imagine you want to send several small documents over a socket.
+     * Using CRLF as a separator is likely unwise, as a CRLF could easily exist within the documents.
+     * In this particular example, it would be better to use a protocol similar to HTTP with
+     * a header that includes the length of the document.
+     * Also be careful that your separator cannot occur naturally as part of the encoding for a character.
+     *
+     * The given data (separator) parameter should be immutable.
+     * For performance reasons, the socket will retain it, not copy it.
+     * So if it is immutable, don't modify it while the socket is using it.
+     **/
+    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, maxLength:UInt, tag:Int) {
+        
+    }
+    /**
+     * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
+     * The bytes will be appended to the given byte buffer starting at the given offset.
+     * The given buffer will automatically be increased in size if needed.
+     *
+     * If the timeout value is negative, the read operation will not use a timeout.
+     * If the buffer if nil, a buffer will automatically be created for you.
+     *
+     * If maxLength is zero, no length restriction is enforced.
+     * Otherwise if maxLength bytes are read without completing the read,
+     * it is treated similarly to a timeout - the socket is closed with a GCDAsyncSocketReadMaxedOutError.
+     * The read will complete successfully if exactly maxLength bytes are read and the given data is found at the end.
+     *
+     * If you pass a maxLength parameter that is less than the length of the data (separator) parameter,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     * If the bufferOffset is greater than the length of the given buffer,
+     * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+     *
+     * If you pass a buffer, you must not alter it in any way while the socket is using it.
+     * After completion, the data returned in socket:didReadData:withTag: will be a subset of the given buffer.
+     * That is, it will reference the bytes that were appended to the given buffer via
+     * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
+     *
+     * To read a line from the socket, use the line separator (e.g. CRLF for HTTP, see below) as the "data" parameter.
+     * If you're developing your own custom protocol, be sure your separator can not occur naturally as
+     * part of the data between separators.
+     * For example, imagine you want to send several small documents over a socket.
+     * Using CRLF as a separator is likely unwise, as a CRLF could easily exist within the documents.
+     * In this particular example, it would be better to use a protocol similar to HTTP with
+     * a header that includes the length of the document.
+     * Also be careful that your separator cannot occur naturally as part of the encoding for a character.
+     *
+     * The given data (separator) parameter should be immutable.
+     * For performance reasons, the socket will retain it, not copy it.
+     * So if it is immutable, don't modify it while the socket is using it.
+     **/
+    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, maxLength:UInt, tag:Int) {
+        
+    }
+    /**
+     * Returns progress of the current read, from 0.0 to 1.0, or NaN if no current read (use isnan() to check).
+     * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
+     **/
+    func progressOfReadReturningTag(inout tagPtr:Int, inout bytesDone:UInt, inout total:UInt) -> Float {
+        return 0.0
+    }
+    /**
+    * This method starts a new read, if needed.
+    *
+    * It is called when:
+    * - a user requests a read
+    * - after a read request has finished (to handle the next request)
+    * - immediately after the socket opens to handle any pending requests
+    *
+    * This method also handles auto-disconnect post read/write completion.
+    **/
+    func maybeDequeueRead() {
+        
+    }
+    func flushSSLBuffers() {
+        
+    }
+    func doReadData() {
+        
+    }
+    func doReadEOF() {
+        
+    }
+    func completeCurrentRead() {
+        
+    }
+    func endCurrentRead() {
+        
+    }
+    func setupReadTimerWithTimeout(timeout:NSTimeInterval) {
+        
+    }
+    func doReadTimeout() {
+        
+    }
+    func doReadTimeoutWithExtension(timeoutExtension:NSTimeInterval) {
+        
+    }
      
      /***********************************************************/
      // MARK: Writing
      /***********************************************************/
+     /**
+     * Writes data to the socket, and calls the delegate when finished.
+     *
+     * If you pass in nil or zero-length data, this method does nothing and the delegate will not be called.
+     * If the timeout value is negative, the write operation will not use a timeout.
+     *
+     * Thread-Safety Note:
+     * If the given data parameter is mutable (NSMutableData) then you MUST NOT alter the data while
+     * the socket is writing it. In other words, it's not safe to alter the data until after the delegate method
+     * socket:didWriteDataWithTag: is invoked signifying that this particular write operation has completed.
+     * This is due to the fact that GCDAsyncSocket does NOT copy the data. It simply retains it.
+     * This is for performance reasons. Often times, if NSMutableData is passed, it is because
+     * a request/response was built up in memory. Copying this data adds an unwanted/unneeded overhead.
+     * If you need to write data from an immutable buffer, and you need to alter the buffer before the socket
+     * completes writing the bytes (which is NOT immediately after this method returns, but rather at a later time
+     * when the delegate method notifies you), then you should first copy the bytes, and pass the copy to this method.
+     **/
+    func writeData(data:NSData?, withTimeout timeout:NSTimeInterval, tag:Int){
+        
+    }
+    /**
+     * Returns progress of the current write, from 0.0 to 1.0, or NaN if no current write (use isnan() to check).
+     * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
+     **/
+    func progressOfWriteReturningFlag(inout tagPtr:Int, inout bytesDone donePtr:UInt, inout total:UInt) -> Float {
+        return 0.0
+    }
+    /**
+    * Conditionally starts a new write.
+    *
+    * It is called when:
+    * - a user requests a write
+    * - after a write request has finished (to handle the next request)
+    * - immediately after the socket opens to handle any pending requests
+    *
+    * This method also handles auto-disconnect post read/write completion.
+    **/
+    func maybeDequeueWrite() {
+        
+    }
+    func doWriteData() {
+        
+    }
+    func completeCurrentWrite() {
+        
+    }
+    func endCurrentWrite() {
+        
+    }
+    func setupWriteTimerWithTimeout(timeout:NSTimeInterval) {
+        
+    }
+    func doWriteTimeout() {
+        
+    }
+    func doWriteTimeoutWithExtension(timeoutExtension:NSTimeInterval) {
+        
+    }
      
      /***********************************************************/
      // MARK: Security
      /***********************************************************/
-     
+     /**
+     * Secures the connection using SSL/TLS.
+     *
+     * This method may be called at any time, and the TLS handshake will occur after all pending reads and writes
+     * are finished. This allows one the option of sending a protocol dependent StartTLS message, and queuing
+     * the upgrade to TLS at the same time, without having to wait for the write to finish.
+     * Any reads or writes scheduled after this method is called will occur over the secured connection.
+     *
+     * ==== The available TOP-LEVEL KEYS are:
+     *
+     * - GCDAsyncSocketManuallyEvaluateTrust
+     *     The value must be of type NSNumber, encapsulating a BOOL value.
+     *     If you set this to YES, then the underlying SecureTransport system will not evaluate the SecTrustRef of the peer.
+     *     Instead it will pause at the moment evaulation would typically occur,
+     *     and allow us to handle the security evaluation however we see fit.
+     *     So GCDAsyncSocket will invoke the delegate method socket:shouldTrustPeer: passing the SecTrustRef.
+     *
+     *     Note that if you set this option, then all other configuration keys are ignored.
+     *     Evaluation will be completely up to you during the socket:didReceiveTrust:completionHandler: delegate method.
+     *
+     *     For more information on trust evaluation see:
+     *     Apple's Technical Note TN2232 - HTTPS Server Trust Evaluation
+     *     https://developer.apple.com/library/ios/technotes/tn2232/_index.html
+     *
+     *     If unspecified, the default value is NO.
+     *
+     * - GCDAsyncSocketUseCFStreamForTLS (iOS only)
+     *     The value must be of type NSNumber, encapsulating a BOOL value.
+     *     By default GCDAsyncSocket will use the SecureTransport layer to perform encryption.
+     *     This gives us more control over the security protocol (many more configuration options),
+     *     plus it allows us to optimize things like sys calls and buffer allocation.
+     *
+     *     However, if you absolutely must, you can instruct GCDAsyncSocket to use the old-fashioned encryption
+     *     technique by going through the CFStream instead. So instead of using SecureTransport, GCDAsyncSocket
+     *     will instead setup a CFRead/CFWriteStream. And then set the kCFStreamPropertySSLSettings property
+     *     (via CFReadStreamSetProperty / CFWriteStreamSetProperty) and will pass the given options to this method.
+     *
+     *     Thus all the other keys in the given dictionary will be ignored by GCDAsyncSocket,
+     *     and will passed directly CFReadStreamSetProperty / CFWriteStreamSetProperty.
+     *     For more infomation on these keys, please see the documentation for kCFStreamPropertySSLSettings.
+     *
+     *     If unspecified, the default value is NO.
+     *
+     * ==== The available CONFIGURATION KEYS are:
+     *
+     * - kCFStreamSSLPeerName
+     *     The value must be of type NSString.
+     *     It should match the name in the X.509 certificate given by the remote party.
+     *     See Apple's documentation for SSLSetPeerDomainName.
+     *
+     * - kCFStreamSSLCertificates
+     *     The value must be of type NSArray.
+     *     See Apple's documentation for SSLSetCertificate.
+     *
+     * - kCFStreamSSLIsServer
+     *     The value must be of type NSNumber, encapsulationg a BOOL value.
+     *     See Apple's documentation for SSLCreateContext for iOS.
+     *     This is optional for iOS. If not supplied, a NO value is the default.
+     *     This is not needed for Mac OS X, and the value is ignored.
+     *
+     * - GCDAsyncSocketSSLPeerID
+     *     The value must be of type NSData.
+     *     You must set this value if you want to use TLS session resumption.
+     *     See Apple's documentation for SSLSetPeerID.
+     *
+     * - GCDAsyncSocketSSLProtocolVersionMin
+     * - GCDAsyncSocketSSLProtocolVersionMax
+     *     The value(s) must be of type NSNumber, encapsulting a SSLProtocol value.
+     *     See Apple's documentation for SSLSetProtocolVersionMin & SSLSetProtocolVersionMax.
+     *     See also the SSLProtocol typedef.
+     *
+     * - GCDAsyncSocketSSLSessionOptionFalseStart
+     *     The value must be of type NSNumber, encapsulating a BOOL value.
+     *     See Apple's documentation for kSSLSessionOptionFalseStart.
+     *
+     * - GCDAsyncSocketSSLSessionOptionSendOneByteRecord
+     *     The value must be of type NSNumber, encapsulating a BOOL value.
+     *     See Apple's documentation for kSSLSessionOptionSendOneByteRecord.
+     *
+     * - GCDAsyncSocketSSLCipherSuites
+     *     The values must be of type NSArray.
+     *     Each item within the array must be a NSNumber, encapsulating
+     *     See Apple's documentation for SSLSetEnabledCiphers.
+     *     See also the SSLCipherSuite typedef.
+     *
+     * - GCDAsyncSocketSSLDiffieHellmanParameters (Mac OS X only)
+     *     The value must be of type NSData.
+     *     See Apple's documentation for SSLSetDiffieHellmanParams.
+     *
+     * ==== The following UNAVAILABLE KEYS are: (with throw an exception)
+     *
+     * - kCFStreamSSLAllowsAnyRoot (UNAVAILABLE)
+     *     You MUST use manual trust evaluation instead (see GCDAsyncSocketManuallyEvaluateTrust).
+     *     Corresponding deprecated method: SSLSetAllowsAnyRoot
+     *
+     * - kCFStreamSSLAllowsExpiredRoots (UNAVAILABLE)
+     *     You MUST use manual trust evaluation instead (see GCDAsyncSocketManuallyEvaluateTrust).
+     *     Corresponding deprecated method: SSLSetAllowsExpiredRoots
+     *
+     * - kCFStreamSSLAllowsExpiredCertificates (UNAVAILABLE)
+     *     You MUST use manual trust evaluation instead (see GCDAsyncSocketManuallyEvaluateTrust).
+     *     Corresponding deprecated method: SSLSetAllowsExpiredCerts
+     *
+     * - kCFStreamSSLValidatesCertificateChain (UNAVAILABLE)
+     *     You MUST use manual trust evaluation instead (see GCDAsyncSocketManuallyEvaluateTrust).
+     *     Corresponding deprecated method: SSLSetEnableCertVerify
+     *
+     * - kCFStreamSSLLevel (UNAVAILABLE)
+     *     You MUST use GCDAsyncSocketSSLProtocolVersionMin & GCDAsyncSocketSSLProtocolVersionMin instead.
+     *     Corresponding deprecated method: SSLSetProtocolVersionEnabled
+     *
+     *
+     * Please refer to Apple's documentation for corresponding SSLFunctions.
+     *
+     * If you pass in nil or an empty dictionary, the default settings will be used.
+     *
+     * IMPORTANT SECURITY NOTE:
+     * The default settings will check to make sure the remote party's certificate is signed by a
+     * trusted 3rd party certificate agency (e.g. verisign) and that the certificate is not expired.
+     * However it will not verify the name on the certificate unless you
+     * give it a name to verify against via the kCFStreamSSLPeerName key.
+     * The security implications of this are important to understand.
+     * Imagine you are attempting to create a secure connection to MySecureServer.com,
+     * but your socket gets directed to MaliciousServer.com because of a hacked DNS server.
+     * If you simply use the default settings, and MaliciousServer.com has a valid certificate,
+     * the default settings will not detect any problems since the certificate is valid.
+     * To properly secure your connection in this particular scenario you
+     * should set the kCFStreamSSLPeerName property to "MySecureServer.com".
+     * 
+     * You can also perform additional validation in socketDidSecure.
+     **/
+    func startTLS(tlsSettings:NSDictionary?){
+        
+    }
+    func maybeStartTLS() {
+        
+    }
+    
      /***********************************************************/
      // MARK: Security via SecureTransport
      /***********************************************************/
-    
+    func sslReadWithBuffer(buffer:UnsafeMutablePointer<CInt>, inout length bufferLength:size_t) -> OSStatus {
+        return 0
+    }
+    func sslWriteWithBuffer(buffer:UnsafeMutablePointer<CInt>, inout length bufferLength:size_t) -> OSStatus {
+        return 0
+    }
+    //static OSStatus SSLReadFunction(SSLConnectionRef connection, void *data, size_t *dataLength)
+    //static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, size_t *dataLength)
+    func ssl_startTLS() {
+        
+    }
+    func ssl_continueSSLHandshake() {
+        
+    }
+    func ssl_shouldTrustPeer(shouldTrust:Bool, stateIndex:Int) {
+        
+    }
      /***********************************************************/
      // MARK: Security via CFStream
      /***********************************************************/
+    #if iOS
+    func cf_finishSSLHandshake() {
+    
+    }
+    func cf_abortSSLHandshake() throws {
+    
+    }
+    func cf_startTLS() {
+    
+    }
+    #endif
     
      /***********************************************************/
      // MARK: CFStream
      /***********************************************************/
+    #if iOS
+    func ignore(sender:AnyObject?){
     
+    }
+    func startCFStreamThreadIfNeeded() {
+    
+    }
+    func stopCFStreamThreadIfNeeded() {
+    
+    }
+    func cfstreamThread() {
+    
+    }
+    func scheduleCFStreams(asyncSocket:GCDAsyncSocket){
+    
+    }
+    func unscheduleCFStreams(asyncSocket:GCDAsyncSocket){
+    
+    }
+    static func CFReadStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, inout pInfo:UnsafeMutablePointer<CInt>) {
+    
+    }
+    static func CFWriteStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, inout pInfo:UnsafeMutablePointer<CInt>) {
+    
+    }
+    func createReadAndWriteStream() -> Bool {
+    
+    }
+    func registerForStreamCallbacksIncludingReadWrite(includeReadWrite:Bool) -> Bool {
+    
+    }
+    func addStreamsToRunLoop() -> Bool {
+    
+    }
+    func removeStreamsFromRunLoop() {
+    
+    }
+    func openStreams() -> Bool {
+    
+    }
+    #endif
      /***********************************************************/
      // MARK: Advanced
      /***********************************************************/
+     /**
+     * Traditionally sockets are not closed until the conversation is over.
+     * However, it is technically possible for the remote enpoint to close its write stream.
+     * Our socket would then be notified that there is no more data to be read,
+     * but our socket would still be writeable and the remote endpoint could continue to receive our data.
+     *
+     * The argument for this confusing functionality stems from the idea that a client could shut down its
+     * write stream after sending a request to the server, thus notifying the server there are to be no further requests.
+     * In practice, however, this technique did little to help server developers.
+     *
+     * To make matters worse, from a TCP perspective there is no way to tell the difference from a read stream close
+     * and a full socket close. They both result in the TCP stack receiving a FIN packet. The only way to tell
+     * is by continuing to write to the socket. If it was only a read stream close, then writes will continue to work.
+     * Otherwise an error will be occur shortly (when the remote end sends us a RST packet).
+     *
+     * In addition to the technical challenges and confusion, many high level socket/stream API's provide
+     * no support for dealing with the problem. If the read stream is closed, the API immediately declares the
+     * socket to be closed, and shuts down the write stream as well. In fact, this is what Apple's CFStream API does.
+     * It might sound like poor design at first, but in fact it simplifies development.
+     *
+     * The vast majority of the time if the read stream is closed it's because the remote endpoint closed its socket.
+     * Thus it actually makes sense to close the socket at this point.
+     * And in fact this is what most networking developers want and expect to happen.
+     * However, if you are writing a server that interacts with a plethora of clients,
+     * you might encounter a client that uses the discouraged technique of shutting down its write stream.
+     * If this is the case, you can set this property to NO,
+     * and make use of the socketDidCloseReadStream delegate method.
+     * 
+     * The default value is YES.
+     **/
+    func autoDisconnectOnClosedReadStream() -> Bool {
+        return false
+    }
+    func setAutoDisconnectOnClosedReadStream(flag:Bool) {
+        
+    }
+    /**
+     * GCDAsyncSocket maintains thread safety by using an internal serial dispatch_queue.
+     * In most cases, the instance creates this queue itself.
+     * However, to allow for maximum flexibility, the internal queue may be passed in the init method.
+     * This allows for some advanced options such as controlling socket priority via target queues.
+     * However, when one begins to use target queues like this, they open the door to some specific deadlock issues.
+     *
+     * For example, imagine there are 2 queues:
+     * dispatch_queue_t socketQueue;
+     * dispatch_queue_t socketTargetQueue;
+     *
+     * If you do this (pseudo-code):
+     * socketQueue.targetQueue = socketTargetQueue;
+     *
+     * Then all socketQueue operations will actually get run on the given socketTargetQueue.
+     * This is fine and works great in most situations.
+     * But if you run code directly from within the socketTargetQueue that accesses the socket,
+     * you could potentially get deadlock. Imagine the following code:
+     *
+     * - (BOOL)socketHasSomething
+     * {
+     *     __block BOOL result = NO;
+     *     dispatch_block_t block = ^{
+     *         result = [self someInternalMethodToBeRunOnlyOnSocketQueue];
+     *     }
+     *     if (is_executing_on_queue(socketQueue))
+     *         block();
+     *     else
+     *         dispatch_sync(socketQueue, block);
+     *
+     *     return result;
+     * }
+     *
+     * What happens if you call this method from the socketTargetQueue? The result is deadlock.
+     * This is because the GCD API offers no mechanism to discover a queue's targetQueue.
+     * Thus we have no idea if our socketQueue is configured with a targetQueue.
+     * If we had this information, we could easily avoid deadlock.
+     * But, since these API's are missing or unfeasible, you'll have to explicitly set it.
+     *
+     * IF you pass a socketQueue via the init method,
+     * AND you've configured the passed socketQueue with a targetQueue,
+     * THEN you should pass the end queue in the target hierarchy.
+     *
+     * For example, consider the following queue hierarchy:
+     * socketQueue -> ipQueue -> moduleQueue
+     *
+     * This example demonstrates priority shaping within some server.
+     * All incoming client connections from the same IP address are executed on the same target queue.
+     * And all connections for a particular module are executed on the same target queue.
+     * Thus, the priority of all networking for the entire module can be changed on the fly.
+     * Additionally, networking traffic from a single IP cannot monopolize the module.
+     *
+     * Here's how you would accomplish something like that:
+     * - (dispatch_queue_t)newSocketQueueForConnectionFromAddress:(NSData *)address onSocket:(GCDAsyncSocket *)sock
+     * {
+     *     dispatch_queue_t socketQueue = dispatch_queue_create("", NULL);
+     *     dispatch_queue_t ipQueue = [self ipQueueForAddress:address];
+     *
+     *     dispatch_set_target_queue(socketQueue, ipQueue);
+     *     dispatch_set_target_queue(iqQueue, moduleQueue);
+     *
+     *     return socketQueue;
+     * }
+     * - (void)socket:(GCDAsyncSocket *)sock didAcceptNewSocket:(GCDAsyncSocket *)newSocket
+     * {
+     *     [clientConnections addObject:newSocket];
+     *     [newSocket markSocketQueueTargetQueue:moduleQueue];
+     * }
+     * 
+     * Note: This workaround is ONLY needed if you intend to execute code directly on the ipQueue or moduleQueue.
+     * This is often NOT the case, as such queues are used solely for execution shaping.
+     **/
+    func markSocketQueueTargetQueue(socketNewTargetQueue:dispatch_queue_t) {
+        
+    }
+    func unmarkSocketQueueTargetQueue(socketOldTargetQueue:dispatch_queue_t) {
+        
+    }
+    /**
+     * It's not thread-safe to access certain variables from outside the socket's internal queue.
+     *
+     * For example, the socket file descriptor.
+     * File descriptors are simply integers which reference an index in the per-process file table.
+     * However, when one requests a new file descriptor (by opening a file or socket),
+     * the file descriptor returned is guaranteed to be the lowest numbered unused descriptor.
+     * So if we're not careful, the following could be possible:
+     *
+     * - Thread A invokes a method which returns the socket's file descriptor.
+     * - The socket is closed via the socket's internal queue on thread B.
+     * - Thread C opens a file, and subsequently receives the file descriptor that was previously the socket's FD.
+     * - Thread A is now accessing/altering the file instead of the socket.
+     *
+     * In addition to this, other variables are not actually objects,
+     * and thus cannot be retained/released or even autoreleased.
+     * An example is the sslContext, of type SSLContextRef, which is actually a malloc'd struct.
+     *
+     * Although there are internal variables that make it difficult to maintain thread-safety,
+     * it is important to provide access to these variables
+     * to ensure this class can be used in a wide array of environments.
+     * This method helps to accomplish this by invoking the current block on the socket's internal queue.
+     * The methods below can be invoked from within the block to access
+     * those generally thread-unsafe internal variables in a thread-safe manner.
+     * The given block will be invoked synchronously on the socket's internal queue.
+     *
+     * If you save references to any protected variables and use them outside the block, you do so at your own peril.
+     **/
+    func performBlock(block:dispatch_block_t) {
+        
+    }
+    /**
+     * These methods are only available from within the context of a performBlock: invocation.
+     * See the documentation for the performBlock: method above.
+     *
+     * Provides access to the socket's file descriptor(s).
+     * If the socket is a server socket (is accepting incoming connections),
+     * it might actually have multiple internal socket file descriptors - one for IPv4 and one for IPv6.
+     **/
+    func socketFD() -> Int {
+        return 0
+    }
+    func socket4FD() -> Int {
+        return 0
+    }
+    func socket6FD() -> Int {
+        return 0
+    }
+    #if TARGET_OS_IPHONE
+    /**
+    * These methods are only available from within the context of a performBlock: invocation.
+    * See the documentation for the performBlock: method above.
+    *
+    * Provides access to the socket's internal CFReadStream/CFWriteStream.
+    *
+    * These streams are only used as workarounds for specific iOS shortcomings:
+    *
+    * - Apple has decided to keep the SecureTransport framework private is iOS.
+    *   This means the only supplied way to do SSL/TLS is via CFStream or some other API layered on top of it.
+    *   Thus, in order to provide SSL/TLS support on iOS we are forced to rely on CFStream,
+    *   instead of the preferred and faster and more powerful SecureTransport.
+    *
+    * - If a socket doesn't have backgrounding enabled, and that socket is closed while the app is backgrounded,
+    *   Apple only bothers to notify us via the CFStream API.
+    *   The faster and more powerful GCD API isn't notified properly in this case.
+    *
+    * See also: (BOOL)enableBackgroundingOnSocket
+    **/
+    func readStream() -> CFReadStreamRef {
     
+    }
+    func writeStream() -> CFWriteStreamRef {
+    
+    }
+    
+    /**
+    * This method is only available from within the context of a performBlock: invocation.
+    * See the documentation for the performBlock: method above.
+    *
+    * Configures the socket to allow it to operate when the iOS application has been backgrounded.
+    * In other words, this method creates a read & write stream, and invokes:
+    *
+    * CFReadStreamSetProperty(readStream, kCFStreamNetworkServiceType, kCFStreamNetworkServiceTypeVoIP);
+    * CFWriteStreamSetProperty(writeStream, kCFStreamNetworkServiceType, kCFStreamNetworkServiceTypeVoIP);
+    *
+    * Returns YES if successful, NO otherwise.
+    *
+    * Note: Apple does not officially support backgrounding server sockets.
+    * That is, if your socket is accepting incoming connections, Apple does not officially support
+    * allowing iOS applications to accept incoming connections while an app is backgrounded.
+    *
+    * Example usage:
+    *
+    * - (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port
+    * {
+    *     [asyncSocket performBlock:^{
+    *         [asyncSocket enableBackgroundingOnSocket];
+    *     }];
+    * }
+    **/
+    func enableBackgroundingOnSocketWithCaveat(caveat:Bool) -> Bool {
+    
+    }
+    func enableBackgroundingOnSocket() -> Bool {
+    
+    }
+    #endif
+    
+    /**
+     * This method is only available from within the context of a performBlock: invocation.
+     * See the documentation for the performBlock: method above.
+     *
+     * Provides access to the socket's SSLContext, if SSL/TLS has been started on the socket.
+     **/
+    func sslContext() -> SSLContextRef? {
+        if dispatch_get_specific(GCDAsyncSocketQueueName) == nil {
+            print("sslContext is only available from within a block")
+            return nil
+        }
+        return _sslContext
+    }
      /***********************************************************/
      // MARK: Class Utilities
      /***********************************************************/
+     /**
+     * The address lookup utility used by the class.
+     * This method is synchronous, so it's recommended you use it on a background thread/queue.
+     *
+     * The special strings "localhost" and "loopback" return the loopback address for IPv4 and IPv6.
+     *
+     * @returns
+     *   A mutable array with all IPv4 and IPv6 addresses returned by getaddrinfo.
+     *   The addresses are specifically for TCP connections.
+     *   You can filter the addresses, if needed, using the other utility methods provided by the class.
+     **/
+    class func lookupHost(host:String, port:UInt16) throws -> [NSData] {
+        return [NSData]()
+    }
     
+    /**
+     * Extracting host and port information from raw address data.
+     **/
+    class func hostFromSockaddr4(inout sockaddr4:sockaddr_in) -> String {
+        return ""
+    }
+    class func hostFromSockaddr6(inout sockaddr6:sockaddr_in6) -> String {
+        return ""
+    }
+    class func portFromSockaddr4(inout sockaddr4:sockaddr_in) -> UInt16 {
+        return 0
+    }
+    class func portFromSockaddr6(inout sockaddr6:sockaddr_in6) -> UInt16 {
+        return 0
+    }
+    class func urlFromSockaddrUN(inout sockaddrUn:sockaddr_un) -> NSURL {
+        return NSURL(string: "")!
+    }
+    class func hostFromAddress(address:NSData) -> String {
+        return ""
+    }
+    class func portFromAddress(address:NSData) -> UInt16 {
+        return 0
+    }
+    class func isIPv4Address(address:NSData) -> Bool {
+        return false
+    }
+    class func isIPv6Address(address:NSData) -> Bool {
+        return false
+    }
+    class func getHost(inout host:String, inout port:UInt16, fromAddress address:NSData) -> Bool {
+        return false
+    }
+    class func getHost(inout host:String, inout port:UInt16, inout family:sa_family_t, fromAddress address:NSData) -> Bool {
+        return false
+    }
+//    class func CRLFData() -> NSData {
+//    
+//    }
 }
