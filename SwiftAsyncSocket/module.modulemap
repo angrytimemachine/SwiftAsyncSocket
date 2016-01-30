@@ -1,0 +1,4 @@
+framework module SwiftAsyncSocket {
+    exclude header "SwiftAsyncSocket-Swift.h"
+}
+

@@ -75,8 +75,8 @@ struct GCDAsyncSocketConfig : OptionSetType {
 enum GCDAsyncSocketError: ErrorType {
     case PosixError(message:String)
     case BadConfigError(message:String)
+    case BadParamError(message:String)
 }
-
 
 /**
  * GCDAsyncSocket uses the standard delegate paradigm,
@@ -103,9 +103,9 @@ class GCDAsyncSocket {
     var socketUN : Int32 = SOCKET_NULL
     var socketUrl : NSURL? = nil
     var stateIndex : Int = 0
-    var connectInterface4 : NSData? = nil
-    var connectInterface6 : NSData? = nil
-    var connectInterfaceUN : NSData? = nil
+    var connectInterface4 : NSMutableData? = nil
+    var connectInterface6 : NSMutableData? = nil
+    var connectInterfaceUN : NSMutableData? = nil
     
     let socketQueue : dispatch_queue_t
     
@@ -428,6 +428,10 @@ class GCDAsyncSocket {
     }
     
     init(withDelegate aDelegate : GCDAsyncSocketDelegate?, delegateQueue dq : dispatch_queue_t?, socketQueue aSocketQueue : dispatch_queue_t!) {
+        connectInterface4 = NSMutableData()
+        connectInterface6 = NSMutableData()
+        connectInterfaceUN = NSMutableData()
+        
         if let sq = aSocketQueue {
             assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), "The given socketQueue parameter must not be a concurrent queue.");
             assert(sq !== dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), "The given socketQueue parameter must not be a concurrent queue.");
@@ -654,12 +658,11 @@ class GCDAsyncSocket {
             
             if enableIPv6 {
                 if enableIPv4 && port == 0 {
-                    //!!!: implement localPort4
                     // No specific port was specified, so we allowed the OS to pick an available port for us.
                     // Now we need to make sure the IPv6 socket listens on the same port as the IPv4 socket.
                     
                     var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6.mutableBytes).memory
-//                    addr6.sin6_port = htons([self localPort4]);
+                    addr6.sin6_port = swift_htons(self.localPort4());
                 }
                 self._socket6FD = try createSocket(AF_INET6, interface6)
                 if self._socket6FD == SOCKET_NULL {
@@ -834,8 +837,7 @@ class GCDAsyncSocket {
                         // Setup read and write sources for accepted socket
                         
                         dispatch_async(acceptedSocket.socketQueue){
-                            //!!!: implement setupReadAndWriteSourcesForNewlyConnectedSocket
-//                            acceptedSocket.setupReadAndWriteSourcesForNewlyConnectedSocket(childSocketFD)
+                            acceptedSocket.setupReadAndWriteSourcesForNewlyConnectedSocket(childSocketFD)
                         }
                         
                         // Notify delegate
@@ -859,11 +861,71 @@ class GCDAsyncSocket {
      /***********************************************************/
      // MARK: Connecting
      /***********************************************************/
+     /**
+     * This method runs through the various checks required prior to a connection attempt.
+     * It is shared between the connectToHost and connectToAddress methods.
+     * 
+     **/
     func preConnectWithInterface(interface:String) throws -> Bool {
-        return true
+        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        
+        if delegate == nil {
+            throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate. Set a delegate first.")
+        }
+        
+        if delegateQueue == nil {
+            throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate queue. Set a delegate queue first.")
+        }
+        
+        if !isDisconnected() {
+            throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect while connected or accepting connections. Disconnect first.")
+        }
+        
+        let isIPv4Disabled = config.contains(.IPv4Disabled)
+        let isIPv6Disabled = config.contains(.IPv6Disabled)
+        
+        if isIPv4Disabled && isIPv6Disabled {
+            throw GCDAsyncSocketError.BadConfigError(message: "Both IPv4 and IPv6 have been disabled. Must enable at least one protocol first.")
+        }
+        
+//        if interface?.characters.count > 0, let iface = interface {
+            var interface4 = NSMutableData()
+            var interface6 = NSMutableData()
+            
+            getInterfaceAddress4(&interface4, address6: &interface6, fromDescription:interface, port: 0)
+            if interface4.length == 0 && interface6.length == 0 {
+                throw GCDAsyncSocketError.BadParamError(message: "Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.")
+            }
+            if isIPv4Disabled && interface6.length == 0 {
+                throw GCDAsyncSocketError.BadParamError(message: "IPv4 has been disabled and specified interface doesn't support IPv6.")
+            }
+            if isIPv6Disabled && interface4.length == 0 {
+                throw GCDAsyncSocketError.BadParamError(message: "IPv6 has been disabled and specified interface doesn't support IPv4")
+            }
+            
+            connectInterface4 = interface4
+            connectInterface6 = interface6
+            return true
+//        }
+        
     }
-    func preConnectWithUrl(url:String) throws -> Bool {
-        return true
+    func preConnectWithUrl(url:NSURL) throws {
+        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        
+        if delegate == nil {
+            throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate. Set a delegate first.")
+        }
+        if delegateQueue == nil {
+            throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate queue. Set a delegate queue first.")
+        }
+        guard let interface = getInterfaceAddressFromUrl(url) else {
+            throw GCDAsyncSocketError.BadConfigError(message: "Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.")
+        }
+        connectInterfaceUN = interface
+        
+        // Clear queues (spurious read/write requests post disconnect)
+        readQueue.removeAll()
+        writeQueue.removeAll()
     }
     /**
      * Connects to the given host and port.
@@ -871,16 +933,16 @@ class GCDAsyncSocket {
      * This method invokes connectToHost:onPort:viaInterface:withTimeout:error:
      * and uses the default interface, and no timeout.
      **/
-    func connectToHost(host:String, onPort port:UInt16) throws -> Bool {
-        return true
+    func connectToHost(host:String, onPort port:UInt16) throws {
+        return try connectToHost(host, onPort: port, withTimeout: -1)
     }
     /**
      * Connects to the given host and port with an optional timeout.
      *
      * This method invokes connectToHost:onPort:viaInterface:withTimeout:error: and uses the default interface.
      **/
-    func connectToHost(host:String, onPort port:UInt16, withTimeout timeout:NSTimeInterval) throws -> Bool {
-        return true
+    func connectToHost(host:String, onPort port:UInt16, withTimeout timeout:NSTimeInterval) throws {
+        try connectToHost(host, onPort: port, viaInterface:"", withTimeout: timeout)
     }
     /**
      * Connects to the given host & port, via the optional interface, with an optional timeout.
@@ -914,8 +976,77 @@ class GCDAsyncSocket {
      * Local ports do NOT need to match remote ports. In fact, they almost never do.
      * This feature is here for networking professionals using very advanced techniques.
      **/
-    func connectToHost(host:String, onPort port:UInt16, viaInterface inInterface:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
-        return true
+    func connectToHost(host:String, onPort port:UInt16, viaInterface interface:String, withTimeout timeout:NSTimeInterval) throws {
+        print("connectToHost:onPort:viaInterface:withTimeout")
+        // Just in case immutable objects were passed
+        let block = {
+            autoreleasepool {
+                do {
+                    // Check for problems with host parameter
+                    guard host.characters.count > 0 else {
+                        GCDAsyncSocketError.BadParamError(message: "Invalid host parameter (nil or \"\"). Should be a domain name or IP address string.")
+                        return
+                    }
+                    // Run through standard pre-connect checks
+                    guard try self.preConnectWithInterface(interface) else {
+                        return
+                    }
+                    
+                    // We've made it past all the checks.
+                    // It's time to start the connection process.
+                    self.flags.append(.SocketStarted)
+                    
+                    print("Dispatching DNS lookup...")
+                    
+                    
+                    //---From what I can tell, you don't have to worry about this with Swift
+                    // It's possible that the given host parameter is actually a NSMutableString.
+                    // So we want to copy it now, within this block that will be executed synchronously.
+                    // This way the asynchronous lookup block below doesn't have to worry about it changing.
+                    let aStateIndex = self.stateIndex
+                    weak var weakSelf = self
+                    let globalConcurrentQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
+                    dispatch_async(globalConcurrentQueue, {
+                        do {
+                            let addresses = try GCDAsyncSocket.lookupHost(host, port: port)
+                            guard let strongSelf = weakSelf else {
+                                return
+                            }
+                            var address4 : NSData?
+                            var address6 : NSData?
+                            for address in addresses {
+                                if address4 == nil && GCDAsyncSocket.isIPv4Address(address) {
+                                    address4 = address
+                                }
+                                else if address6 == nil && GCDAsyncSocket.isIPv6Address(address) {
+                                    address6 = address
+                                }
+                            }
+                            
+                            dispatch_async(strongSelf.socketQueue, {
+                                strongSelf.lookupDidSucceed(aStateIndex, withAddress4:address4, address6:address6)
+                            })
+                            
+                        }catch let lookupError {
+                            autoreleasepool {
+                                if let strongSelf = weakSelf {
+                                    strongSelf.lookupDidFail(aStateIndex, withError:lookupError)
+                                }
+                            }
+                        }
+                    })
+                    self.startConnectTimeout(timeout)
+                } catch _ {
+                    
+                }
+            }
+        }
+        
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            block()
+        } else {
+            dispatch_async(socketQueue, block)
+        }
     }
     /**
      * Connects to the given address, specified as a sockaddr structure wrapped in a NSData object.
@@ -981,7 +1112,7 @@ class GCDAsyncSocket {
     func connectToUrl(url:String, withTimeout timeout:NSTimeInterval) throws -> Bool {
         return true
     }
-    func lookupDidSucceed(stateIndex:Int, WithAddress4 address4:NSData?, address6:NSData?) {
+    func lookupDidSucceed(stateIndex:Int, withAddress4 address4:NSData?, address6:NSData?) {
         
     }
     /**
@@ -992,7 +1123,7 @@ class GCDAsyncSocket {
      * the original connection request may have already been cancelled or timed-out by the time this method is invoked.
      * The lookupIndex tells us whether the lookup is still valid or not.
      **/
-    func lookupDidFail(stateIndex:Int) throws {
+    func lookupDidFail(stateIndex:Int, withError error:ErrorType) {
         
     }
     func connectWithAddress4(address4:NSData?, address6:NSData?) throws -> Bool {
@@ -1023,10 +1154,10 @@ class GCDAsyncSocket {
         stateIndex++;
         
         if connectInterface4 != nil {
-            connectInterface4 = nil;
+            connectInterface4 = nil
         }
         if connectInterface6 != nil {
-            connectInterface6 = nil;
+            connectInterface6 = nil
         }
     }
     func doConnectTimeout() {
@@ -1235,12 +1366,13 @@ class GCDAsyncSocket {
     * The returned value is a 'struct sockaddr' wrapped in an NSMutableData object.
     **/
     func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData, inout address6 interfaceAddr6Ptr : NSMutableData, fromDescription interfaceDescription : String, port : UInt16) {
+        //!!! check that interfaceDescription has a characters.count
         
     }
-    func getInterfaceAddressFromUrl(url:NSURL) -> NSData? {
+    func getInterfaceAddressFromUrl(url:NSURL) -> NSMutableData? {
         return nil
     }
-    func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int) {
+    func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int32) {
         
     }
     func usingCFStreamForTLS() -> Bool {

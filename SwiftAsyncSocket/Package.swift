@@ -6,9 +6,8 @@
 //  Copyright © 2016 Joel Saltzman. All rights reserved.
 //
 
-import Foundation
-#if os(Linux)
-    import Glibc
-#else
-    import Darwin.C
-#endif
+import PackageDescription
+
+let package = Package(
+    name: "SwiftAsyncSocket"
+)
