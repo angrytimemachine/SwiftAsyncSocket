@@ -132,7 +132,7 @@ protocol GCDAsyncSocketDelegate : AnyObject {
 *
 * Of course, this depends on how your state machine is configured.
 **/
-    func socketDidDisconnect(sock:GCDAsyncSocket, withError:GCDAsyncSocketError)
+    func socketDidDisconnect(sock:GCDAsyncSocket?, withError:ErrorType?)
 
 /**
 * Called after the socket has successfully completed SSL/TLS negotiation.
