@@ -1,6 +1,0 @@
-framework module SwiftCWrapper {
-  umbrella header "SwiftCWrapper.h"
-
-  export *
-  module * { export * }
-}

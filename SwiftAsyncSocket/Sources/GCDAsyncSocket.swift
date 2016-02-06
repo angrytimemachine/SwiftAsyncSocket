@@ -12,8 +12,8 @@
 */
 
 import Foundation
+import ifaddrs
 import SwiftCWrapper
-
 #if iOS
     import CFNetwork
 #endif
@@ -24,6 +24,8 @@ import SwiftCWrapper
 * This makes invalid file descriptor comparisons easier to read.
 **/
 let SOCKET_NULL : Int32 = -1
+let INADDR_ANY : UInt16 = 0x00000000
+let INADDR_LOOPBACK : UInt32 = 0x7f000001
 
 let GCDAsyncSocketException = "GCDAsyncSocketException"
 let GCDAsyncSocketErrorDomain = "GCDAsyncSocketErrorDomain"
@@ -610,8 +612,6 @@ class GCDAsyncSocket {
     * To accept connections on any interface pass nil, or simply use the acceptOnPort:error: method.
     **/
     func acceptOnInterface(inputInterface : String?, port : UInt16) throws {
-
-        let interface = inputInterface != nil ? inputInterface! : ""
         
         // CreateSocket Block returns the file descriptor that it connected with
         // This block will be invoked within the dispatch block below.
@@ -661,7 +661,7 @@ class GCDAsyncSocket {
             // Resolve interface from description
             var interface4 = NSMutableData.init()
             var interface6 = NSMutableData.init()
-            self.getInterfaceAddress4(&interface4, address6: &interface6, fromDescription: interface, port: port)
+            self.getInterfaceAddress4(&interface4, address6: &interface6, fromDescription: inputInterface, port: port)
             
             if interface4.length == 0 && interface6.length == 0 {
                 throw GCDAsyncSocketError.BadConfigError(message: "Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.")
@@ -2393,8 +2393,59 @@ class GCDAsyncSocket {
     *
     * The returned value is a 'struct sockaddr' wrapped in an NSMutableData object.
     **/
-    func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData, inout address6 interfaceAddr6Ptr : NSMutableData, fromDescription interfaceDescription : String, port : UInt16) {
-        //!!! check that interfaceDescription has a characters.count
+    func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData, inout address6 interfaceAddr6Ptr : NSMutableData, fromDescription interfaceDescription : String?, var port : UInt16) {
+        
+        var addr4:NSMutableData? = nil
+        var addr6:NSMutableData? = nil
+        var interface:String? = nil
+        
+        if let interfaceDesc = interfaceDescription {
+            let components = interfaceDesc.characters.split(":").map{String($0)}
+            if let temp = components.first {
+                interface = temp
+            }
+            if components.count > 1 && port == 0 {
+                if let portL = UInt16(components[1]) {
+                    port = portL
+                }
+            }
+        }
+        
+        let parseAddresses = { (host:UInt32, inAddress:in6_addr) -> Void in
+            var sockaddr4 = sockaddr_in()
+            sockaddr4.sin_len         = UInt8(sizeofValue(sockaddr4))
+            sockaddr4.sin_family      = sa_family_t(AF_INET)
+            sockaddr4.sin_port        = swift_htons(port)
+            sockaddr4.sin_addr.s_addr = in_addr_t(swift_htonl(host))
+
+            var sockaddr6 = sockaddr_in6();
+            sockaddr6.sin6_len       = UInt8(sizeofValue(sockaddr6))
+            sockaddr6.sin6_family    = sa_family_t(AF_INET6)
+            sockaddr6.sin6_port      = swift_htons(port)
+            sockaddr6.sin6_addr      = inAddress
+            
+            addr4 = NSMutableData.init(bytes: &sockaddr4, length: Int(sizeofValue(sockaddr4)) )
+            addr6 = NSMutableData.init(bytes: &sockaddr6, length: Int(sizeofValue(sockaddr6)) )
+        }
+        
+        if interface == nil {
+            // ANY address
+            parseAddresses(UInt32(INADDR_ANY), in6addr_any)
+        }
+        else if let theInterface = interface {
+            if theInterface == "localhost" || theInterface == "loopback" {
+                parseAddresses(INADDR_LOOPBACK, in6addr_loopback)
+            }
+            else {
+                var ifaddr : UnsafeMutablePointer<ifaddrs> = nil
+//                let iface = theInterface.utf8
+//                var addrs = ifaddrs()
+//                var cursor = ifaddrs()
+//                if swift_getifaddres(&addrs) == 0 {
+//                    
+//                }
+            }
+        }
         
     }
     func getInterfaceAddressFromUrl(url:NSURL) -> NSMutableData? {

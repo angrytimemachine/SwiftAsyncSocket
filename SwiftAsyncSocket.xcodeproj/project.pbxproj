@@ -14,7 +14,6 @@
 		3835AA891C43522E0055A53B /* GCDAsyncReadPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */; };
 		3835AA8B1C4352440055A53B /* GCDAsyncWritePacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */; };
 		3835AA8D1C43525C0055A53B /* GCDAsyncSpecialPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */; };
-		38A572371C5D40300054B44B /* SwiftCWrapper.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 38A572341C5D40180054B44B /* SwiftCWrapper.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		38D6E8B21C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -35,7 +34,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				38A572371C5D40300054B44B /* SwiftCWrapper.framework in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,8 +51,9 @@
 		3835AA881C43522E0055A53B /* GCDAsyncReadPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncReadPacket.swift; sourceTree = "<group>"; };
 		3835AA8A1C4352440055A53B /* GCDAsyncWritePacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncWritePacket.swift; sourceTree = "<group>"; };
 		3835AA8C1C43525C0055A53B /* GCDAsyncSpecialPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSpecialPacket.swift; sourceTree = "<group>"; };
-		38A572341C5D40180054B44B /* SwiftCWrapper.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SwiftCWrapper.framework; sourceTree = "<group>"; };
 		38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocketDelegate.swift; sourceTree = "<group>"; };
+		38FF677B1C66751100E99321 /* GCDAsyncSocket.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GCDAsyncSocket.m; sourceTree = "<group>"; };
+		38FF68021C6684EB00E99321 /* module.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = module.map; path = ../ifaddrs/module.map; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +78,8 @@
 		3835AA5A1C433B580055A53B = {
 			isa = PBXGroup;
 			children = (
+				38FF677B1C66751100E99321 /* GCDAsyncSocket.m */,
+				38FF68001C66838400E99321 /* ifaddrs */,
 				3835AA661C433B580055A53B /* SwiftAsyncSocket */,
 				3835AA721C433B580055A53B /* SwiftAsyncSocketTests */,
 				3835AA651C433B580055A53B /* Products */,
@@ -99,7 +100,6 @@
 			children = (
 				3835AA691C433B580055A53B /* Info.plist */,
 				3835AA7E1C433ECD0055A53B /* Package.swift */,
-				38A572341C5D40180054B44B /* SwiftCWrapper.framework */,
 				3835AA821C433EED0055A53B /* Sources */,
 			);
 			path = SwiftAsyncSocket;
@@ -125,6 +125,14 @@
 				38D6E8B11C4CB55D0088EF46 /* GCDAsyncSocketDelegate.swift */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		38FF68001C66838400E99321 /* ifaddrs */ = {
+			isa = PBXGroup;
+			children = (
+				38FF68021C6684EB00E99321 /* module.map */,
+			);
+			path = ifaddrs;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -183,7 +191,7 @@
 		3835AA5B1C433B580055A53B /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 0730;
+				LastSwiftUpdateCheck = 0720;
 				LastUpgradeCheck = 0720;
 				ORGANIZATIONNAME = "Joel Saltzman";
 				TargetAttributes = {
@@ -304,6 +312,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Clibs";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
@@ -344,6 +353,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Clibs";
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
@@ -367,11 +377,10 @@
 				INFOPLIST_FILE = SwiftAsyncSocket/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/Frameworks";
-				MODULEMAP_FILE = SwiftAsyncSocket/module.modulemap;
-				MODULEMAP_PRIVATE_FILE = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.joelsaltzman.SwiftAsyncSocket;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_INCLUDE_PATHS = "${SRCROOT}/ifaddrs";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -394,11 +403,10 @@
 				INFOPLIST_FILE = SwiftAsyncSocket/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/Frameworks";
-				MODULEMAP_FILE = SwiftAsyncSocket/module.modulemap;
-				MODULEMAP_PRIVATE_FILE = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.joelsaltzman.SwiftAsyncSocket;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_INCLUDE_PATHS = "${SRCROOT}/ifaddrs";
 			};
 			name = Release;
 		};

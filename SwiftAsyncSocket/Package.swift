@@ -10,4 +10,5 @@ import PackageDescription
 
 let package = Package(
     name: "SwiftAsyncSocket"
+    //dependencies: [.Package(url: "../Cifaddrs", majorVersion: 0, minor: 1)]
 )

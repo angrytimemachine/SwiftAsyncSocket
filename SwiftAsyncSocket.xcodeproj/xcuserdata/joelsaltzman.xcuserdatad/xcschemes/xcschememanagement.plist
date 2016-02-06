@@ -9,6 +9,16 @@
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
+		<key>SwiftAsyncSocketOSX.xcscheme</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
+		<key>SwiftAsyncSocketOSXTests.xcscheme</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
@@ -18,6 +28,26 @@
 			<true/>
 		</dict>
 		<key>3835AA6D1C433B580055A53B</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>38FF67801C66755F00E99321</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>38FF678E1C6675D500E99321</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>38FF67E51C667DF600E99321</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>38FF67EE1C667DF600E99321</key>
 		<dict>
 			<key>primary</key>
 			<true/>

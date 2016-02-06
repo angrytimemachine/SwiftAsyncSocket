@@ -5,6 +5,6 @@
       location = "group:SwiftAsyncSocket.xcodeproj">
    </FileRef>
    <FileRef
-      location = "group:../CocoaAsyncSocket/CocoaAsyncSocket.xcodeproj">
+      location = "group:../SwiftCWrapper/SwiftCWrapper.xcodeproj">
    </FileRef>
 </Workspace>
