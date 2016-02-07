@@ -160,5 +160,5 @@ protocol GCDAsyncSocketDelegate : AnyObject {
 * The completionHandler block is thread-safe, and may be invoked from a background queue/thread.
 * It is safe to invoke the completionHandler block even if the socket has been closed.
 **/
-    func socket(sock:GCDAsyncSocket, didReceiveTrust trust:SecTrustRef, completionHandler:()->Void)
+    func socket(sock:GCDAsyncSocket, didReceiveTrust trust:SecTrust, completionHandler:()->Void)
 }

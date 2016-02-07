@@ -358,9 +358,9 @@ class GCDAsyncReadPacket {
                     break
                 }
                 
-                buf++
-                bufLen--
-                preLen++
+                buf += 1
+                bufLen -= 1
+                preLen += 1
             }
             else
             {
@@ -374,7 +374,7 @@ class GCDAsyncReadPacket {
                     break
                 }
                 
-                pre++
+                pre += 1
             }
         }
         
@@ -423,7 +423,7 @@ class GCDAsyncReadPacket {
                 return buffLength - (i + termLength)
             }
             
-            i++
+            i += 1
         }
         
         return -1

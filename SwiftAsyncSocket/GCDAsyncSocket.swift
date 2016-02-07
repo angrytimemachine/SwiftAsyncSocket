@@ -11,10 +11,9 @@
 
 */
 
+
 import Foundation
-import Darwin
-import ifaddrs
-import SwiftCWrapper
+
 #if iOS
     import CFNetwork
 #endif
@@ -159,7 +158,7 @@ class GCDAsyncSocket {
     var readStream : CFReadStreamRef? = nil
     var writeStream : CFWriteStreamRef? = nil
     #endif
-    var _sslContext : SSLContextRef? = nil
+    var _sslContext : SSLContext? = nil
     var sslPreBuffer : GCDAsyncSocketPreBuffer? = nil
     var sslWriteCachedLength : size_t = 0
     var sslErrCode : OSStatus = 0
@@ -542,12 +541,12 @@ class GCDAsyncSocket {
         flags.append(GCDAsyncSocketFlags.Dealloc)
         
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
-            close(withError: nil)
+            closeSocket(withError: nil)
             
         }
         else {
             dispatch_sync(socketQueue, { () -> Void in
-                self.close(withError: nil)
+                self.closeSocket(withError: nil)
             })
         }
         
@@ -630,7 +629,7 @@ class GCDAsyncSocket {
             
             // Listen
             if listen(socketFD, 1024) == -1 {
-                swift_close(socketFD)
+                close(socketFD)
                 throw GCDAsyncSocketError.PosixError(message: "Error in listen() function")
             }
             
@@ -691,12 +690,12 @@ class GCDAsyncSocket {
                     // Now we need to make sure the IPv6 socket listens on the same port as the IPv4 socket.
                     
                     var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6.mutableBytes).memory
-                    addr6.sin6_port = swift_htons(self.localPort4());
+                    addr6.sin6_port = self.localPort4().bigEndian;//bigEndian instead of htons
                 }
                 self._socket6FD = try createSocket(AF_INET6, interface6)
                 if self._socket6FD == SOCKET_NULL {
                     if self._socket4FD != SOCKET_NULL {
-                        swift_close(self._socket4FD)
+                        close(self._socket4FD)
                         return
                     }
                 }
@@ -728,8 +727,11 @@ class GCDAsyncSocket {
                         
                         var i : UInt = 0
                         let numPendingConnections = dispatch_source_get_data(acceptSource)
-                        while strongSelf.doAccept(socketFD) && (++i < numPendingConnections) {
-                            
+                        while strongSelf.doAccept(socketFD) {
+                            i += 1
+                            if i >= numPendingConnections {
+                                break;
+                            }
                         }
                     }
                 }
@@ -739,7 +741,7 @@ class GCDAsyncSocket {
 //                        if !OS_OBJECT_USE_OBJC
 //                        dispatch_release(acceptSource);
 //                        #endif
-                    swift_close(socketFD)
+                    close(socketFD)
                 }
                 
                 dispatch_resume(acceptSource)
@@ -1220,7 +1222,7 @@ class GCDAsyncSocket {
             autoreleasepool {
                 do {
                     // Check for problems with host parameter
-                    if url.path?.characters.count == 0 {
+                    if url.pathComponents != nil && url.pathComponents!.count == 0 {
                         throw GCDAsyncSocketError.BadParamError(message: "Invalid unix domain socket url.")
                     }
                     
@@ -1262,12 +1264,12 @@ class GCDAsyncSocket {
         let isIPv4Disabled = config.contains(.IPv4Disabled)
         let isIPv6Disabled = config.contains(.IPv6Disabled)
         if isIPv4Disabled && address6 == nil {
-            close(withError: GCDAsyncSocketError.OtherError(message: 
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: 
                 "IPv4 has been disabled and DNS lookup found no IPv6 address."))
             return
         }
         if isIPv6Disabled && address4 == nil {
-            close(withError: GCDAsyncSocketError.OtherError(message:
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message:
                 "IPv4 has been disabled and DNS lookup found no IPv6 address."))
             return
         }
@@ -1275,7 +1277,7 @@ class GCDAsyncSocket {
         do {
             try connectWithAddress4(address4, address6: address6)
         }catch let e {
-            close(withError:e)
+            closeSocket(withError:e)
         }
     }
     /**
@@ -1296,7 +1298,7 @@ class GCDAsyncSocket {
             return;
         }
         self.endConnectTimeout()
-        self.close(withError: error)
+        self.closeSocket(withError: error)
     }
     func connectWithAddress4(address4:NSData?, address6:NSData?) throws {
         assert(dispatch_get_specific(GCDAsyncSocketQueueName) == nil, "Must be dispatched on socketQueue")
@@ -1442,11 +1444,11 @@ class GCDAsyncSocket {
         #if TARGET_OS_IPHONE
         let SetupStreamsPart1 = {
                 guard self.createReadAndWriteStream() else {
-                    self.close(withError: GCDAsyncSocketError.OtherError(message: "Error creating CFStreams"))
+                    self.closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error creating CFStreams"))
                     return;
                 }
                 guard self.registerForStreamCallbacks(includingReadWrite:false) else {
-                    self.close(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamSetClient"))
+                    self.closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamSetClient"))
                     return;
                 }
         }
@@ -1457,11 +1459,11 @@ class GCDAsyncSocket {
                 return;
             }
             guard self.addStreamsToRunLoop() else {
-                self.close(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamScheduleWithRunLoop"))
+                self.closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamScheduleWithRunLoop"))
                 return;
             }
             guard self.openStreams() else {
-                self.close(withError: GCDAsyncSocketError.OtherError(message: "Error creating CFStreams"))
+                self.closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error creating CFStreams"))
                 return;
             }
 
@@ -1517,7 +1519,7 @@ class GCDAsyncSocket {
         do {
             try setNonBlocking(socket: socketFD)
         } catch let e{
-            close(withError:e)
+            closeSocket(withError:e)
             return
         }
         
@@ -1535,7 +1537,7 @@ class GCDAsyncSocket {
             // That is, socket was disconnected, or connection has already timed out.
             return;
         }
-        close(withError: error)
+        closeSocket(withError: error)
     }
     func startConnectTimeout(timeout:NSTimeInterval) {
         if timeout < 0.0 {
@@ -1577,7 +1579,7 @@ class GCDAsyncSocket {
         // Note: This should be called from close method even if connectTimer is NULL.
         // This is because one might disconnect a socket prior to a successful connection which had no timeout.
         
-        stateIndex++;
+        stateIndex += 1;
         
         if connectInterface4 != nil {
             connectInterface4 = nil
@@ -1588,11 +1590,11 @@ class GCDAsyncSocket {
     }
     func doConnectTimeout() {
         endConnectTimeout()
-        close(withError:GCDAsyncSocketError.TimeoutError())
+        closeSocket(withError:GCDAsyncSocketError.TimeoutError())
     }
     func setNonBlocking(socket socketFD:Int32) throws {
-        if swift_fcntl(socketFD, F_SETFL, O_NONBLOCK) == -1 {
-            swift_close(socketFD)
+        if fcntl(socketFD, F_SETFL, O_NONBLOCK) == -1 {
+            close(socketFD)
             throw GCDAsyncSocketError.PosixError(message: "Error enabling non-blocking IO on socket (fcntl)")
         }
     }
@@ -1610,7 +1612,7 @@ class GCDAsyncSocket {
     func setReuseOn(socket socketFD:Int32) throws {
 //        var reuseOn = 1
 //        if setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuseOn, socklen_t(sizeofValue(reuseOn))) == -1 {
-//            swift_close(socketFD)
+//            close(socketFD)
 //            throw GCDAsyncSocketError.PosixError(message: "Error enabling address reuse (setsockopt)")
 //        }
         var reuseOn:CInt = 1
@@ -1626,7 +1628,7 @@ class GCDAsyncSocket {
      /***********************************************************/
      // MARK: Disconnecting
      /***********************************************************/
-    func close(withError error:ErrorType?) {
+    func closeSocket(withError error:ErrorType?) {
         assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
         endConnectTimeout()
         if currentRead != nil {
@@ -1681,17 +1683,17 @@ class GCDAsyncSocket {
             
             if _socket4FD != SOCKET_NULL {
                 print("Verbose: close(socket4FD)")
-                swift_close(_socket4FD)
+                close(_socket4FD)
                 _socket4FD = SOCKET_NULL
             }
             if _socket6FD != SOCKET_NULL {
                 print("Verbose: close(socket6FD)")
-                swift_close(_socket6FD)
+                close(_socket6FD)
                 _socket6FD = SOCKET_NULL
             }
             if socketUN != SOCKET_NULL {
                 print("Verbose: close(socketUN)")
-                swift_close(socketUN)
+                close(socketUN)
                 socketUN = SOCKET_NULL
                 if let url = socketUrl {
                     unlink(url.fileSystemRepresentation)
@@ -1782,7 +1784,7 @@ class GCDAsyncSocket {
         let block = {
             autoreleasepool {
                 if self.flags.contains(.SocketStarted) {
-                    self.close(withError: nil)
+                    self.closeSocket(withError: nil)
                 }
             }
         }
@@ -1868,7 +1870,7 @@ class GCDAsyncSocket {
         }
         
         if shouldClose {
-            close(withError: nil)
+            closeSocket(withError: nil)
         }
     }
 
@@ -2394,11 +2396,12 @@ class GCDAsyncSocket {
     *
     * The returned value is a 'struct sockaddr' wrapped in an NSMutableData object.
     **/
-    func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData, inout address6 interfaceAddr6Ptr : NSMutableData, fromDescription interfaceDescription : String?, var port : UInt16) {
+    func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData?, inout address6 interfaceAddr6Ptr : NSMutableData?, fromDescription interfaceDescription : String?, port : UInt16) {
         
         var addr4:NSMutableData? = nil
         var addr6:NSMutableData? = nil
         var interface:String? = nil
+        var thePort = port
         
         if let interfaceDesc = interfaceDescription {
             let components = interfaceDesc.characters.split(":").map{String($0)}
@@ -2407,7 +2410,7 @@ class GCDAsyncSocket {
             }
             if components.count > 1 && port == 0 {
                 if let portL = UInt16(components[1]) {
-                    port = portL
+                    thePort = portL
                 }
             }
         }
@@ -2416,13 +2419,13 @@ class GCDAsyncSocket {
             var sockaddr4 = sockaddr_in()
             sockaddr4.sin_len         = UInt8(sizeofValue(sockaddr4))
             sockaddr4.sin_family      = sa_family_t(AF_INET)
-            sockaddr4.sin_port        = swift_htons(port)
-            sockaddr4.sin_addr.s_addr = in_addr_t(swift_htonl(host))
+            sockaddr4.sin_port        = thePort.bigEndian
+            sockaddr4.sin_addr.s_addr = in_addr_t(host.bigEndian)
 
             var sockaddr6 = sockaddr_in6();
             sockaddr6.sin6_len       = UInt8(sizeofValue(sockaddr6))
             sockaddr6.sin6_family    = sa_family_t(AF_INET6)
-            sockaddr6.sin6_port      = swift_htons(port)
+            sockaddr6.sin6_port      = port.bigEndian
             sockaddr6.sin6_addr      = inAddress
             
             addr4 = NSMutableData.init(bytes: &sockaddr4, length: Int(sizeofValue(sockaddr4)) )
@@ -2438,19 +2441,20 @@ class GCDAsyncSocket {
                 parseAddresses(INADDR_LOOPBACK, in6addr_loopback)
             }
             else {
-                
-                let iface = theInterface.utf8
-                var addrs : UnsafeMutablePointer<ifaddrs> = nil
-                var cursor : UnsafeMutablePointer<ifaddrs> = nil
-                if getifaddrs(&addrs) == 0 {
-                    
-                }
+                //!!! finish when we have access to ifaddrs
+//                let iface = theInterface.utf8
+//                var addrs : UnsafeMutablePointer<ifaddrs> = nil
+//                var cursor : UnsafeMutablePointer<ifaddrs> = nil
+//                if getifaddrs(&addrs) == 0 {
+//                    
+//                }
             }
         }
-        
+        interfaceAddr4Ptr = addr4
+        interfaceAddr6Ptr = addr6
     }
     func getInterfaceAddressFromUrl(url:NSURL) -> NSMutableData? {
-        return nil
+//        if url.path?.characters.count
     }
     func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int32) {
         
@@ -3154,7 +3158,7 @@ class GCDAsyncSocket {
      *
      * In addition to this, other variables are not actually objects,
      * and thus cannot be retained/released or even autoreleased.
-     * An example is the sslContext, of type SSLContextRef, which is actually a malloc'd struct.
+     * An example is the sslContext, of type SSLContext, which is actually a malloc'd struct.
      *
      * Although there are internal variables that make it difficult to maintain thread-safety,
      * it is important to provide access to these variables
@@ -3252,7 +3256,7 @@ class GCDAsyncSocket {
      *
      * Provides access to the socket's SSLContext, if SSL/TLS has been started on the socket.
      **/
-    func sslContext() -> SSLContextRef? {
+    func sslContext() -> SSLContext? {
         if dispatch_get_specific(GCDAsyncSocketQueueName) == nil {
             print("sslContext is only available from within a block")
             return nil
