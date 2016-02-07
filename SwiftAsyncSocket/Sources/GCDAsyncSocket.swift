@@ -12,6 +12,7 @@
 */
 
 import Foundation
+import Darwin
 import ifaddrs
 import SwiftCWrapper
 #if iOS
@@ -2437,13 +2438,13 @@ class GCDAsyncSocket {
                 parseAddresses(INADDR_LOOPBACK, in6addr_loopback)
             }
             else {
-                var ifaddr : UnsafeMutablePointer<ifaddrs> = nil
-//                let iface = theInterface.utf8
-//                var addrs = ifaddrs()
-//                var cursor = ifaddrs()
-//                if swift_getifaddres(&addrs) == 0 {
-//                    
-//                }
+                
+                let iface = theInterface.utf8
+                var addrs : UnsafeMutablePointer<ifaddrs> = nil
+                var cursor : UnsafeMutablePointer<ifaddrs> = nil
+                if getifaddrs(&addrs) == 0 {
+                    
+                }
             }
         }
         
