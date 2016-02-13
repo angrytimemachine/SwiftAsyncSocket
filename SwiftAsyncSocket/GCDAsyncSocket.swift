@@ -13,7 +13,7 @@
 
 
 import Foundation
-
+import ifaddrs
 #if iOS
     import CFNetwork
 #endif
@@ -130,7 +130,7 @@ class GCDAsyncSocket {
     var stateIndex : Int = 0
     var connectInterface4 : NSMutableData? = nil
     var connectInterface6 : NSMutableData? = nil
-    var connectInterfaceUN : NSMutableData? = nil
+    var connectInterfaceUN : NSData? = nil
     
     let socketQueue : dispatch_queue_t
     
@@ -659,22 +659,22 @@ class GCDAsyncSocket {
             self.writeQueue.removeAll()
             
             // Resolve interface from description
-            var interface4 = NSMutableData.init()
-            var interface6 = NSMutableData.init()
+            var interface4 : NSMutableData? = NSMutableData.init()
+            var interface6 : NSMutableData? = NSMutableData.init()
             self.getInterfaceAddress4(&interface4, address6: &interface6, fromDescription: inputInterface, port: port)
             
-            if interface4.length == 0 && interface6.length == 0 {
+            if (interface4 == nil || interface4!.length == 0) && (interface6 == nil || interface6!.length == 0) {
                 throw GCDAsyncSocketError.BadConfigError(message: "Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.")
             }
             
-            if isIPv4Disabled && interface6.length == 0 {
+            if isIPv4Disabled && (interface6 == nil || interface6!.length == 0) {
                 throw GCDAsyncSocketError.BadConfigError(message: "IPv4 has been disabled and specified interface doesn't support IPv6.")
             }
-            if isIPv6Disabled && interface4.length == 0 {
+            if isIPv6Disabled && (interface4 == nil || interface4!.length == 0) {
                 throw GCDAsyncSocketError.BadConfigError(message: "IPv6 has been disabled and specified interface doesn't support IPv4.")
             }
-            let enableIPv4 = !isIPv4Disabled && interface4.length != 0
-            let enableIPv6 = !isIPv6Disabled && interface6.length != 0
+            let enableIPv4 = !isIPv4Disabled && (interface4 != nil && interface4!.length != 0)
+            let enableIPv6 = !isIPv6Disabled && (interface6 != nil && interface6!.length != 0)
             
             // Create sockets, configure, bind, and listen
             if enableIPv4 {
@@ -689,7 +689,7 @@ class GCDAsyncSocket {
                     // No specific port was specified, so we allowed the OS to pick an available port for us.
                     // Now we need to make sure the IPv6 socket listens on the same port as the IPv4 socket.
                     
-                    var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6.mutableBytes).memory
+                    var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6!.bytes).memory
                     addr6.sin6_port = self.localPort4().bigEndian;//bigEndian instead of htons
                 }
                 self._socket6FD = try createSocket(AF_INET6, interface6)
@@ -717,11 +717,10 @@ class GCDAsyncSocket {
             
             
             if let acceptSource = source {
-                weak var weakSelf = self
                 
                 dispatch_source_set_event_handler(acceptSource)  {
-                    autoreleasepool{
-                        guard let strongSelf = weakSelf else {
+                    autoreleasepool{ [weak self] in
+                        guard let strongSelf = self else {
                             return;
                         }
                         
@@ -790,7 +789,7 @@ class GCDAsyncSocket {
             var addr4Len = socklen_t(sizeofValue(addr4))
             
             childSocketFD = withUnsafeMutablePointer(&addr4){
-                accept(parentSocketFD, $0, &addr4Len)
+                return accept(parentSocketFD, $0, &addr4Len)
             }
             
             guard childSocketFD != -1 else {
@@ -927,26 +926,30 @@ class GCDAsyncSocket {
             throw GCDAsyncSocketError.BadConfigError(message: "Both IPv4 and IPv6 have been disabled. Must enable at least one protocol first.")
         }
         
-//        if interface?.characters.count > 0, let iface = interface {
-            var interface4 = NSMutableData()
-            var interface6 = NSMutableData()
-            
+        if interface.characters.count > 0 {
+            var interface4 : NSMutableData? = NSMutableData()
+            var interface6 : NSMutableData? = NSMutableData()
+        
             getInterfaceAddress4(&interface4, address6: &interface6, fromDescription:interface, port: 0)
-            if interface4.length == 0 && interface6.length == 0 {
+            
+            if interface4?.length == 0 && interface6?.length == 0 {
                 throw GCDAsyncSocketError.BadParamError(message: "Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.")
             }
-            if isIPv4Disabled && interface6.length == 0 {
+            if isIPv4Disabled && interface6?.length == 0 {
                 throw GCDAsyncSocketError.BadParamError(message: "IPv4 has been disabled and specified interface doesn't support IPv6.")
             }
-            if isIPv6Disabled && interface4.length == 0 {
+            if isIPv6Disabled && interface4?.length == 0 {
                 throw GCDAsyncSocketError.BadParamError(message: "IPv6 has been disabled and specified interface doesn't support IPv4")
             }
             
             connectInterface4 = interface4
             connectInterface6 = interface6
             return true
-//        }
-        
+        }
+        // Clear queues (spurious read/write requests post disconnect)
+        readQueue.removeAll()
+        writeQueue.removeAll()
+        return true
     }
     func preConnectWithUrl(url:NSURL) throws {
         assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
@@ -1044,12 +1047,12 @@ class GCDAsyncSocket {
                     // So we want to copy it now, within this block that will be executed synchronously.
                     // This way the asynchronous lookup block below doesn't have to worry about it changing.
                     let aStateIndex = self.stateIndex
-                    weak var weakSelf = self
                     let globalConcurrentQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
-                    dispatch_async(globalConcurrentQueue, {
+                    dispatch_async(globalConcurrentQueue, { [weak self]  in
+                        
                         do {
                             let addresses = try GCDAsyncSocket.lookupHost(host, port: port)
-                            guard let strongSelf = weakSelf else {
+                            guard let strongSelf = self else {
                                 return
                             }
                             var address4 : NSData?
@@ -1069,7 +1072,7 @@ class GCDAsyncSocket {
                             
                         }catch let lookupError {
                             autoreleasepool {
-                                if let strongSelf = weakSelf {
+                                if let strongSelf = self {
                                     strongSelf.lookupDidFail(aStateIndex, withError:lookupError)
                                 }
                             }
@@ -2441,20 +2444,90 @@ class GCDAsyncSocket {
                 parseAddresses(INADDR_LOOPBACK, in6addr_loopback)
             }
             else {
-                //!!! finish when we have access to ifaddrs
-//                let iface = theInterface.utf8
-//                var addrs : UnsafeMutablePointer<ifaddrs> = nil
-//                var cursor : UnsafeMutablePointer<ifaddrs> = nil
-//                if getifaddrs(&addrs) == 0 {
-//                    
-//                }
+                let iface = theInterface.cStringUsingEncoding(NSUTF8StringEncoding)
+                var addrs : UnsafeMutablePointer<ifaddrs> = nil
+                var cursor : UnsafeMutablePointer<ifaddrs> = nil
+                if getifaddrs(&addrs) == 0 {
+                    cursor = addrs
+                    while cursor != nil {
+                        if addr4 == nil && Int32(cursor.memory.ifa_addr.memory.sa_family) == AF_INET{
+                            // IPv4
+                            var nativeAddr4:sockaddr_in = UnsafeMutablePointer<sockaddr_in>(cursor).memory
+                            if strcmp(cursor.memory.ifa_name, iface!) == 0 {
+                                // Name match
+                                nativeAddr4.sin_port = port.bigEndian//bigEndian instead of htons
+                                addr4 = NSMutableData.init(bytes:&nativeAddr4, length: sizeofValue(nativeAddr4))
+                            }else{
+                                var ipAddressString = [CChar](count:Int(INET_ADDRSTRLEN), repeatedValue: 0)
+                                let conversion = inet_ntop(AF_INET, &nativeAddr4.sin_addr, &ipAddressString, socklen_t(INET_ADDRSTRLEN))
+                                if conversion != nil && strcmp(ipAddressString, iface!) == 0 {
+                                    // IP match
+                                    nativeAddr4.sin_port = port.bigEndian
+                                }
+                            }
+                            addr4 = NSMutableData.init(bytes:&nativeAddr4, length: sizeofValue(nativeAddr4))
+                        }else if addr6 == nil && Int32(cursor.memory.ifa_addr.memory.sa_family) == AF_INET6 {
+                            // IPv6
+                            var nativeAddr6:sockaddr_in6 = UnsafeMutablePointer<sockaddr_in6>(cursor).memory
+                            if strcmp(cursor.memory.ifa_name, iface!) == 0 {
+                                // Name match
+                                nativeAddr6.sin6_port = port.bigEndian//bigEndian instead of htons
+                                addr6 = NSMutableData.init(bytes:&nativeAddr6, length: sizeofValue(nativeAddr6))
+                            }else{
+                                var ipAddressString = [CChar](count:Int(INET6_ADDRSTRLEN), repeatedValue: 0)
+                                let conversion = inet_ntop(AF_INET, &nativeAddr6.sin6_addr, &ipAddressString, socklen_t(INET6_ADDRSTRLEN))
+                                if conversion != nil && strcmp(ipAddressString, iface!) == 0 {
+                                    // IP match
+                                    nativeAddr6.sin6_port = port.bigEndian
+                                }
+                            }
+                            addr6 = NSMutableData.init(bytes:&nativeAddr6, length: sizeofValue(nativeAddr6))
+                        }
+                        cursor = cursor.memory.ifa_next;
+                    }
+                }
+                freeifaddrs(addrs)
             }
         }
         interfaceAddr4Ptr = addr4
         interfaceAddr6Ptr = addr6
     }
-    func getInterfaceAddressFromUrl(url:NSURL) -> NSMutableData? {
-//        if url.path?.characters.count
+    func getInterfaceAddressFromUrl(url:NSURL) -> NSData? {
+        guard url.path?.characters.count > 0 else {
+            return nil
+        }
+        
+        guard let path = url.path else {
+            return nil
+        }
+        var nativeAddr = sockaddr_un()
+        nativeAddr.sun_family = sa_family_t(AF_UNIX)
+        
+        let length = path.lengthOfBytesUsingEncoding(NSUTF8StringEncoding)
+        nativeAddr.setPath(path, length:length)
+        
+        let lengthOfPath = path.withCString { Int(strlen($0)) }
+        
+//            guard lengthOfPath < sizeofValue(nativeAddr.sun_path) else {
+//                throw SocketError()
+//            }
+        
+        withUnsafeMutablePointer(&nativeAddr.sun_path.0) { ptr in
+            path.withCString {
+                strncpy(ptr, $0, lengthOfPath)
+            }
+        }
+        
+        #if os(Linux)
+            let len = socklen_t(UInt8(sizeof(sockaddr_un)))
+        #else
+            nativeAddr.sun_len = UInt8(sizeof(sockaddr_un) - sizeofValue(nativeAddr.sun_path) + lengthOfPath)
+//                let len = socklen_t(nativeAddr.sun_len)
+        #endif
+//            guard system_bind(descriptor, sockaddr_cast(&addr), len) != -1 else {
+//                throw SocketError()
+//            }
+        return NSData.init(bytes: &nativeAddr, length: Int(sizeofValue(nativeAddr)) )
     }
     func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int32) {
         
