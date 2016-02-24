@@ -10,11 +10,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
-            timestampString = "477037186.453929"
+            timestampString = "477821344.194882"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "58"
-            endingLineNumber = "58"
+            startingLineNumber = "98"
+            endingLineNumber = "98"
             landmarkName = "testMemoryToStructConversion()"
             landmarkType = "5">
          </BreakpointContent>
@@ -26,11 +26,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
-            timestampString = "477037186.453929"
+            timestampString = "477821344.194882"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "50"
-            endingLineNumber = "50"
+            startingLineNumber = "90"
+            endingLineNumber = "90"
             landmarkName = "testMemoryToStructConversion()"
             landmarkType = "5">
          </BreakpointContent>

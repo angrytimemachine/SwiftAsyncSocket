@@ -13,10 +13,12 @@ import Foundation
  * This class my be altered to support more than just TLS in the future.
  **/
 
-class GCDAsyncSpecialPacket {
+class GCDAsyncSpecialPacket : GCDAsyncReadPacket {
     var tlsSettings : [String:AnyObject]
     
     init(withTLSSettings tls : [String:AnyObject]){
         tlsSettings = tls
+        super.init(withData: nil, startOffset: 0, maxLength: 0, timeout: 0, readLength: 0, terminator: nil, tag: 0)
+        
     }
 }

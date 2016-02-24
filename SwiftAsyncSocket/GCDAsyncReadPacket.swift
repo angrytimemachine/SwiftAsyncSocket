@@ -28,7 +28,7 @@ class GCDAsyncReadPacket {
     var originalBufferLength: Int
     var tag: Int
     
-    init(withData d : NSMutableData?, startOffset s : Int, maxLength m : Int, timeout t : NSTimeInterval, readLength l : Int, terminator e : NSData, tag i : Int){
+    init(withData d : NSMutableData?, startOffset s : Int, maxLength m : Int, timeout t : NSTimeInterval, readLength l : Int, terminator e : NSData?, tag i : Int){
         bytesDone = 0
         maxLength = m
         timeout = t
@@ -38,7 +38,7 @@ class GCDAsyncReadPacket {
         bufferOwner = true
         originalBufferLength = 0
         
-        if let terminator = e.copy() as? NSData {
+        if let terminator = e?.copy() as? NSData {
             term =  terminator
         } else {
             term = nil
@@ -65,12 +65,13 @@ class GCDAsyncReadPacket {
             let buffUsed: Int = startOffset + bytesDone
             let buffSpace: Int = buffSize - buffUsed
             if bytesToRead > buffSpace {
-                let buffInc: Int = bytesToRead - buffSpace
-                buffer?.increaseLengthBy(buffInc)
+                if let buffInc: Int = bytesToRead - buffSpace {
+                    buffer?.increaseLengthBy(buffInc)
+                }
             }
         }
-
     }
+    
     /**
     * This method is used when we do NOT know how much data is available to be read from the socket.
     * This method returns the default value unless it exceeds the specified readLength or maxLength.
@@ -350,8 +351,8 @@ class GCDAsyncReadPacket {
             if (bufLen > 0)
             {
                 // Combining bytes from buffer and preBuffer
-                seq.assignFrom(buf, count: bufLen)
-                seq.advancedBy(bufLen).assignFrom(pre, count: preLen)
+                seq.initializeFrom(buf, count: bufLen)
+                seq.advancedBy(bufLen).initializeFrom(pre, count: preLen)
                 if memcmp(seq, termBuf, termLength) == 0 {
                     result = preLen
                     found = true
@@ -365,7 +366,7 @@ class GCDAsyncReadPacket {
             else
             {
                 // Comparing directly from preBuffer
-                pre.assignFrom(termBuf, count: termLength)
+                pre.initializeFrom(termBuf, count: termLength)
                 if memcmp(pre, termBuf, termLength) == 0 {
                     let preOffset = pre - preBuffer.readBuffer(); // pointer arithmetic
                     

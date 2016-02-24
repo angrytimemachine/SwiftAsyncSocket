@@ -21,6 +21,32 @@ class SwiftAsyncSocketTests: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
         super.tearDown()
     }
+    func testGuard() {
+        let packet : GCDAsyncReadPacket? = nil
+        guard let _ = packet where packet?.term?.length > 0 else {
+            // Only flush the ssl buffers if the prebuffer is empty.
+            // This is to avoid growing the prebuffer inifinitely large.
+            return
+        }
+        XCTFail()
+    }
+    func testMemcpyReplacement(){
+        let string = "the quick brown fox"
+        //try copying a whole buffer
+        if let sourceBuffer = string.dataUsingEncoding(NSUTF8StringEncoding)?.mutableCopy() as? NSMutableData {
+            let src : UnsafeMutablePointer<CInt> = UnsafeMutablePointer<CInt>(sourceBuffer.mutableBytes)
+            let dest = UnsafeMutablePointer<CInt>.alloc(string.characters.count)
+            dest.initializeFrom(src, count: sourceBuffer.length)
+            let newBuffer = NSData.init(bytes: dest, length: sourceBuffer.length)
+            guard let newString = NSString(data: newBuffer, encoding: NSUTF8StringEncoding) else{
+                XCTFail()
+                return
+            }
+            XCTAssertEqual(string, newString)
+        }
+        }
+    
+    /*
     func testSunPath() {
         let url = NSURL.init(string: "http://localhost")
         var nativeAddr = sockaddr_un()
@@ -30,7 +56,7 @@ class SwiftAsyncSocketTests: XCTestCase {
             strlcpy($0, url!.fileSystemRepresentation, sizeofValue(url!.fileSystemRepresentation))
         }
         print("sun_family: \(nativeAddr.sun_path)")
-    }
+    }*/
     func testMemoryToStructConversion() {
         // This is an example of a functional test case.
         // Use XCTAssert and related functions to verify your tests produce the correct results.

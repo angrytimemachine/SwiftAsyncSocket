@@ -84,20 +84,25 @@ struct GCDAsyncSocketConfig : OptionSetType {
 };
 
 enum GCDAsyncSocketError: ErrorType {
+    case TimeoutError()
+    case ReadMaxedOutError()
     case PosixError(message:String)
     case BadConfigError(message:String)
     case BadParamError(message:String)
     case OtherError(message:String)
-    case TimeoutError()
+    case SSLError(message:String)
+    
     
     var description : String {
         get {
             switch (self) {
             case .TimeoutError: return "Attempt to connect to host timed out"
+            case .ReadMaxedOutError: return "Read operation reached set maximum length"
             case let .PosixError(message): return message
             case let .BadConfigError(message): return message
             case let .BadParamError(message): return message
             case let .OtherError(message): return message
+            case let .SSLError(message): return message
             }
         }
     }
@@ -143,13 +148,13 @@ class GCDAsyncSocket {
     var readTimer : dispatch_source_t? = nil
     var writeTimer : dispatch_source_t? = nil
     
-    var readQueue : [CInt] = []
-    var writeQueue : [CInt] = []
+    var readQueue : [GCDAsyncReadPacket] = []
+    var writeQueue : [GCDAsyncReadPacket] = []
     
     var currentRead : GCDAsyncReadPacket? = nil
     var currentWrite : GCDAsyncReadPacket? = nil
     
-    var socketFDBytesAvailable : Int = 0
+    var socketFDBytesAvailable : UInt = 0
     
     var preBuffer : GCDAsyncSocketPreBuffer? = nil
     
@@ -195,8 +200,7 @@ class GCDAsyncSocket {
         else {
             if synchronously {
                 dispatch_sync(socketQueue, block)
-            }
-            else{
+            }else{
                 dispatch_async(socketQueue, block)
             }
         }
@@ -245,8 +249,7 @@ class GCDAsyncSocket {
         else {
             if synchronously {
                 dispatch_sync(socketQueue, block)
-            }
-            else{
+            }else{
                 dispatch_async(socketQueue, block)
             }
         }
@@ -298,8 +301,7 @@ class GCDAsyncSocket {
         else {
             if synchronously {
                 dispatch_sync(socketQueue, block)
-            }
-            else{
+            }else{
                 dispatch_async(socketQueue, block)
             }
         }
@@ -344,8 +346,7 @@ class GCDAsyncSocket {
                 if let index = self.config.indexOf(.IPv4Disabled) {
                     self.config.removeAtIndex(index)
                 }
-            }
-            else{
+            }else{
                 //disable it
                 self.config.append(.IPv4Disabled)
             }
@@ -364,7 +365,7 @@ class GCDAsyncSocket {
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.IPv6Disabled)
         }
-            else {
+        else {
             dispatch_sync(socketQueue, { () -> Void in
                 result = !self.config.contains(.IPv6Disabled)
             })
@@ -412,8 +413,7 @@ class GCDAsyncSocket {
         // Note: YES means PreferIPv6 is OFF
         let block = {
             if flag {
-                let index = self.config.indexOf(.PreferIPv6)
-                if let i = index {
+                if let i = self.config.indexOf(.PreferIPv6) {
                     self.config.removeAtIndex(i)
                 }
             }
@@ -805,10 +805,9 @@ class GCDAsyncSocket {
             var addr6 = sockaddr_in6()
             var addr6Len = socklen_t(sizeofValue(addr6))
             
-            childSocketFD = withUnsafeMutablePointer(&addr6){ (addrPtr) -> Int32 in
-                withUnsafeMutablePointer(&addr6Len){ (addrLenPtr) -> Int32 in
-                    accept(parentSocketFD, UnsafeMutablePointer(addrPtr), UnsafeMutablePointer(addrLenPtr))
-                }
+            childSocketFD = withUnsafeMutablePointers(&addr6, &addr6Len){
+                (addrPtr, addrLenPtr) -> Int32 in
+                return accept(parentSocketFD, UnsafeMutablePointer(addrPtr), UnsafeMutablePointer(addrLenPtr))
             }
             
             guard childSocketFD != -1 else {
@@ -1211,8 +1210,7 @@ class GCDAsyncSocket {
         
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
-        }
-            else{
+        }else{
             dispatch_sync(socketQueue, block)
         }
     }
@@ -1249,8 +1247,7 @@ class GCDAsyncSocket {
         }
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
-        }
-            else{
+        }else{
             dispatch_sync(socketQueue, block)
         }
     }
@@ -1793,8 +1790,7 @@ class GCDAsyncSocket {
         }
         if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
             block()
-        }
-            else{
+        }else{
             dispatch_sync(socketQueue, block)
         }
     }
@@ -2530,25 +2526,146 @@ class GCDAsyncSocket {
         return NSData.init(bytes: &nativeAddr, length: Int(sizeofValue(nativeAddr)) )
     }
     func setupReadAndWriteSourcesForNewlyConnectedSocket(socketFD:Int32) {
+        readSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(socketFD), 0, socketQueue)
+        writeSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_WRITE, UInt(socketFD), 0, socketQueue)
         
+        // Setup event handlers
+        dispatch_source_set_event_handler(readSource!){
+            autoreleasepool{
+                [weak self] in
+                guard let strongSelf = self else {
+                    return
+                }
+                print("Verbose: readEventBlock")
+                strongSelf.socketFDBytesAvailable = dispatch_source_get_data(strongSelf.readSource!)
+                print("Verbose: socketFDBytesAvailable \(strongSelf.socketFDBytesAvailable)")
+                if strongSelf.socketFDBytesAvailable > 0 {
+                    strongSelf.doReadData()
+                }else{
+                    strongSelf.doReadEOF()
+                }
+            }
+        }
+        // Setup write handler
+        dispatch_source_set_event_handler(writeSource!){
+            autoreleasepool{
+                [weak self] in
+                guard let strongSelf = self else {
+                    return
+                }
+                print("writeEventBlock");
+                strongSelf.flags.append(.SocketCanAcceptBytes)
+                strongSelf.doWriteData()
+            }
+        }
+        // Setup cancel handlers
+        var socketFDRefCount = 2
+
+        //always ARC, don't need
+//        #if !OS_OBJECT_USE_OBJC
+//            dispatch_source_t theReadSource = readSource;
+//            dispatch_source_t theWriteSource = writeSource;
+//        #endif
+        
+        dispatch_source_set_cancel_handler(readSource!){
+            print("readCancelBlock");
+
+            //always ARC, don't need
+//            #if !OS_OBJECT_USE_OBJC
+//                LogVerbose(@"dispatch_release(readSource)");
+//                dispatch_release(theReadSource);
+//            #endif
+            
+            socketFDRefCount -= 1
+            if socketFDRefCount <= 0 {
+                print("Verbose: close(socketFD)")
+                close(socketFD)
+            }
+        }
+        
+        dispatch_source_set_cancel_handler(writeSource!) {
+            print("writeCancelBlock");
+            
+            //always ARC, don't need
+//            #if !OS_OBJECT_USE_OBJC
+//                LogVerbose(@"dispatch_release(writeSource)");
+//                dispatch_release(theWriteSource);
+//            #endif
+            
+            socketFDRefCount -= 1
+            if socketFDRefCount <= 0 {
+                print("Verbose: close(socketFD)")
+                close(socketFD)
+            }
+        }
+        
+        // We will not be able to read until data arrives.
+        // But we should be able to write immediately.
+        socketFDBytesAvailable = 0
+        if let index = flags.indexOf(.ReadSourceSuspended) {
+            flags.removeAtIndex(index)
+        }
+        
+        print("Verbose: dispatch_resume(readSource)")
+        dispatch_resume(readSource!)
+        
+        flags.append(.SocketCanAcceptBytes)
+        flags.append(.WriteSourceSuspended)
     }
     func usingCFStreamForTLS() -> Bool {
+        #if iOS
+        if flags.contains(.SocketSecure) && flags.contains(.UsingCFStreamForTLS) {
+            // The startTLS method was given the GCDAsyncSocketUseCFStreamForTLS flag.
+            return true
+        }
+        #endif
         return false
     }
     func usingSecureTransportForTLS() -> Bool {
-        return false
+        // Invoking this method is equivalent to ![self usingCFStreamForTLS] (just more readable)
+        #if iOS
+        if flags.contains(.SocketSecure) && flags.contains(.UsingCFStreamForTLS) {
+            // The startTLS method was given the GCDAsyncSocketUseCFStreamForTLS flag.
+            return false
+        }
+        #endif
+        return true
     }
     func suspendReadSource() {
-        
+        if !flags.contains(.ReadSourceSuspended) {
+            print("Verbose: dispatch_suspend(readSource)")
+            
+            dispatch_suspend(readSource!)
+            flags.append(.ReadSourceSuspended)
+        }
     }
     func resumeReadSource() {
-        
+        if flags.contains(.ReadSourceSuspended) {
+            print("Verbose: dispatch_resume(readSource)")
+            
+            dispatch_resume(readSource!)
+            if let index = flags.indexOf(.ReadSourceSuspended) {
+                flags.removeAtIndex(index)
+            }
+        }
     }
     func suspendWriteSource() {
-        
+        if !flags.contains(.WriteSourceSuspended) {
+            print("Verbose: dispatch_suspend(writeSource)")
+            
+            dispatch_suspend(writeSource!)
+            flags.append(.WriteSourceSuspended)
+        }
     }
     func resumeWriteSource() {
-        
+        if flags.contains(.WriteSourceSuspended) {
+            print("Verbose: dispatch_resume(writeSource)")
+            
+            dispatch_resume(writeSource!)
+            if let index = flags.indexOf(.WriteSourceSuspended) {
+                flags.removeAtIndex(index)
+            }
+        }
     }
     
      /***********************************************************/
@@ -2573,7 +2690,7 @@ class GCDAsyncSocket {
      * If the timeout value is negative, the read operation will not use a timeout.
      **/
     func readDataWithTimeout(timeout:NSTimeInterval, tag:Int) {
-        
+        readDataWithTimeout(timeout, buffer:nil, bufferOffset: 0, maxLength: 0, tag: tag)
     }
     /**
      * Reads the first available bytes that become available on the socket.
@@ -2591,8 +2708,8 @@ class GCDAsyncSocket {
      * That is, it will reference the bytes that were appended to the given buffer via
      * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
      **/
-    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
-        
+    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData?, bufferOffset:Int, tag:Int) {
+        readDataWithTimeout(timeout, buffer:buffer, bufferOffset:bufferOffset, maxLength: 0, tag: tag)
     }
     /**
      * Reads the first available bytes that become available on the socket.
@@ -2612,8 +2729,23 @@ class GCDAsyncSocket {
      * That is, it will reference the bytes that were appended to the given buffer  via
      * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
      **/
-    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:UInt, maxLength:UInt, tag:Int) {
-        
+    func readDataWithTimeout(timeout:NSTimeInterval, buffer:NSMutableData?, bufferOffset offset:Int, maxLength:UInt, tag:Int) {
+        guard (buffer != nil && offset <= buffer!.length) || (buffer == nil && offset == 0) else {
+            print("Warning: Cannot read: offset > buffer.length")
+            return
+        }
+        let packet = GCDAsyncReadPacket.init(withData: buffer, startOffset: Int(offset), maxLength: Int(maxLength), timeout: timeout, readLength: 0, terminator: nil, tag: tag)
+        dispatch_async(socketQueue){
+            autoreleasepool {
+                print("Log: readDataWithTimeout")
+                if self.flags.contains(.SocketStarted) && !self.flags.contains(.ForbidReadsWrites) {
+                    self.readQueue.append(packet)
+                    self.maybeDequeueRead()
+                }
+            }
+        }
+        // Do not rely on the block being run in order to release the packet,
+        // as the queue might get released without the block completing.
     }
     /**
      * Reads the given number of bytes.
@@ -2623,7 +2755,7 @@ class GCDAsyncSocket {
      * If the length is 0, this method does nothing and the delegate is not called.
      **/
     func readDataToLength(length:UInt, withTimeout timeout:NSTimeInterval, tag:Int) {
-        
+        readDataToLength(length, withTimeout: timeout, buffer: nil, bufferOffset: 0, tag: tag)
     }
     /**
      * Reads the given number of bytes.
@@ -2642,8 +2774,22 @@ class GCDAsyncSocket {
      * That is, it will reference the bytes that were appended to the given buffer via
      * the method [NSData dataWithBytesNoCopy:length:freeWhenDone:NO].
      **/
-    func readDataToLength(length:UInt, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
-        
+    func readDataToLength(length:UInt, withTimeout timeout:NSTimeInterval, buffer:NSMutableData?, bufferOffset offset:Int, tag:Int) {
+        guard length > 0 else {
+            print("Warning: Cannot read: length == 0")
+            return
+        }
+        guard (buffer != nil && offset <= buffer!.length) || (buffer == nil && offset == 0) else {
+            print("Warning: Cannot read: offset > buffer.length")
+            return;
+        }
+        let packet = GCDAsyncReadPacket.init(withData: buffer, startOffset: offset, maxLength: 0, timeout: timeout, readLength: Int(length), terminator: nil, tag: tag)
+        dispatch_async(socketQueue) {
+            if self.flags.contains(.SocketStarted) && !self.flags.contains(.ForbidReadsWrites) {
+                self.readQueue.append(packet)
+                self.maybeDequeueRead()
+            }
+        }
     }
     /**
      * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
@@ -2666,8 +2812,8 @@ class GCDAsyncSocket {
      * For performance reasons, the socket will retain it, not copy it.
      * So if it is immutable, don't modify it while the socket is using it.
      **/
-    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, tag:Int) {
-        
+    func readDataToData(data:NSMutableData?, withTimeout timeout:NSTimeInterval, tag:Int) {
+        readDataToData(data, withTimeout: timeout, buffer: nil, bufferOffset: 0, maxLength: 0, tag: tag)
     }
     /**
      * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
@@ -2698,8 +2844,8 @@ class GCDAsyncSocket {
      * For performance reasons, the socket will retain it, not copy it.
      * So if it is immutable, don't modify it while the socket is using it.
      **/
-    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, tag:Int) {
-        
+    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData?, bufferOffset:Int, tag:Int) {
+        readDataToData(data, withTimeout: timeout, maxLength: 0, tag: tag)
     }
     /**
      * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
@@ -2730,7 +2876,7 @@ class GCDAsyncSocket {
      * So if it is immutable, don't modify it while the socket is using it.
      **/
     func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, maxLength:UInt, tag:Int) {
-        
+        readDataToData(data, withTimeout: timeout, maxLength: maxLength, tag: tag)
     }
     /**
      * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
@@ -2768,15 +2914,72 @@ class GCDAsyncSocket {
      * For performance reasons, the socket will retain it, not copy it.
      * So if it is immutable, don't modify it while the socket is using it.
      **/
-    func readDataToData(data:NSData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData, bufferOffset:Int, maxLength:UInt, tag:Int) {
+    func readDataToData(data:NSMutableData?, withTimeout timeout:NSTimeInterval, buffer:NSMutableData?, bufferOffset offset:Int, maxLength:Int, tag:Int) {
+        guard let theData = data where data?.length > 0 else {
+            print("Warning: Cannot read: data.length == 0")
+            return
+        }
+        guard offset <= buffer?.length else {
+            print("Warning: Cannot read: offset > buffer.length")
+            return
+        }
+        if maxLength > 0 {
+            guard maxLength >= theData.length else {
+                print("Warning: Cannot read: maxLength > data.length")
+                return
+            }
+        }
+        let packet = GCDAsyncReadPacket.init(withData: buffer, startOffset: offset, maxLength: maxLength, timeout: timeout, readLength: 0, terminator: data, tag: tag)
         
+        dispatch_async(socketQueue) {
+            autoreleasepool {
+                if self.flags.contains(.SocketStarted) && !self.flags.contains(.ForbidReadsWrites) {
+                    self.readQueue.append(packet)
+                    self.maybeDequeueRead()
+                }
+            }
+        }
+        // Do not rely on the block being run in order to release the packet,
+        // as the queue might get released without the block completing.
     }
     /**
      * Returns progress of the current read, from 0.0 to 1.0, or NaN if no current read (use isnan() to check).
      * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
      **/
-    func progressOfReadReturningTag(inout tagPtr:Int, inout bytesDone:UInt, inout total:UInt) -> Float {
-        return 0.0
+    func progressOfReadReturningTag(inout tagPtr:Int, inout bytesDone:Int, inout total:Int) -> Float {
+        var result : Float = 0.0
+        
+        let block = {
+            if let read = self.currentRead {
+                // It's only possible to know the progress of our read if we're reading to a certain length.
+                // If we're reading to data, we of course have no idea when the data will arrive.
+                // If we're reading to timeout, then we have no idea when the next chunk of data will arrive.
+                tagPtr = read.tag
+                bytesDone = read.bytesDone
+                total = read.readLength
+                
+                if total > 0 {
+                    result = Float(bytesDone) / Float(total)
+                }else{
+                    result = 1.0
+                }
+                
+            }else{
+                // We're not reading anything right now.
+                tagPtr = 0
+                bytesDone = 0
+                total = 0
+                result = Float.NaN
+            }
+        }
+        
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            block()
+        }else{
+            dispatch_sync(socketQueue, block)
+        }
+        
+        return result
     }
     /**
     * This method starts a new read, if needed.
@@ -2789,13 +2992,689 @@ class GCDAsyncSocket {
     * This method also handles auto-disconnect post read/write completion.
     **/
     func maybeDequeueRead() {
+        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
         
+        guard let theCurrentRead = currentRead where flags.contains(.Connected) else {
+            return
+        }
+        // If we're not currently processing a read AND we have an available read stream
+        if readQueue.count > 0 {
+            // Dequeue the next object in the write queue
+            currentRead = readQueue.first
+            readQueue.removeFirst()
+            
+            if theCurrentRead is GCDAsyncSpecialPacket {
+                print("Verbose: Dequeued GCDAsyncSpecialPacket")
+                // Attempt to start TLS
+                flags.append(.StartingReadTLS)
+                // This method won't do anything unless both kStartingReadTLS and kStartingWriteTLS are set
+                maybeStartTLS()
+            }else{
+                print("Verbose: Dequeued GCDAsyncSpecialPacket")
+                // Setup read timer (if needed)
+                setupReadTimerWithTimeout(theCurrentRead.timeout)
+                // Immediately read, if possible
+                doReadData()
+            }
+            
+        }else if flags.contains(.DisconnectAfterReads) {
+            if flags.contains(.DisconnectAfterReads) {
+                if writeQueue.count == 0 && currentWrite == nil {
+                    closeSocket(withError: nil)
+                }
+            }else{
+                closeSocket(withError: nil)
+            }
+            
+        }else if flags.contains(.SocketSecure) {
+            flushSSLBuffers()
+            // Edge case:
+            //
+            // We just drained all data from the ssl buffers,
+            // and all known data from the socket (socketFDBytesAvailable).
+            //
+            // If we didn't get any data from this process,
+            // then we may have reached the end of the TCP stream.
+            //
+            // Be sure callbacks are enabled so we're notified about a disconnection.
+            if preBuffer != nil && preBuffer!.availableBytes() == 0 {
+                if usingCFStreamForTLS() {
+                    // Callbacks never disabled
+                }else{
+                    resumeReadSource()
+                }
+            }
+        }
     }
     func flushSSLBuffers() {
+        assert(flags.contains(.SocketSecure), "Cannot flush ssl buffers on non-secure socket")
+        guard let thePreBuffer = preBuffer where preBuffer?.availableBytes() == 0 else {
+            // Only flush the ssl buffers if the prebuffer is empty.
+            // This is to avoid growing the prebuffer inifinitely large.
+            return
+        }
+        guard let theSslContext = self.sslContext() else {
+            return
+        }
+        #if iOS
+        if usingCFStreamForTLS() {
+            if flags.contains(.SecureSocketHasBytesAvailable) && CFReadStreamHasBytesAvailable(readStream) {
+                print("Verbose: flushSSLBuffers() - Flushing ssl buffers into prebuffer...")
+                let defaultBytesToRead : CFIndex = 1024*4
+                thePreBuffer.ensureCapacityForWrite(defaultBytesToRead)
+                let buffer = thePreBuffer.writeBuffer()
+                let result : CFIndex = CFReadStream(readStream, buffer, defaultBytesToRead)
+                print("Verbose: flushSSLBuffers() - CFReadStreamRead(): result = \(result)")
+                if result > 0 {
+                    thePreBuffer.didWrite(bytes: result)
+                }
+                if let index = flags.indexOf(.SecureSocketHasBytesAvailable) {
+                    flags.removeAtIndex(index)
+                }
+            }
+            return
+        }
+        #endif
         
+        var estimatedBytesAvailable:UInt = 0
+        let updateEstimatedBytesAvailable = {
+            // Figure out if there is any data available to be read
+            //
+            // socketFDBytesAvailable        <- Number of encrypted bytes we haven't read from the bsd socket
+            // [sslPreBuffer availableBytes] <- Number of encrypted bytes we've buffered from bsd socket
+            // sslInternalBufSize            <- Number of decrypted bytes SecureTransport has buffered
+            //
+            // We call the variable "estimated" because we don't know how many decrypted bytes we'll get
+            // from the encrypted bytes in the sslPreBuffer.
+            // However, we do know this is an upper bound on the estimation.
+            if let theSslPrebuffer = self.sslPreBuffer {
+                estimatedBytesAvailable = self.socketFDBytesAvailable + UInt(theSslPrebuffer.availableBytes())
+                var sslInternalBufSize = 0
+                withUnsafeMutablePointer(&sslInternalBufSize) {
+                    SSLGetBufferedReadSize(theSslContext, $0)
+                }
+            }
+        }
+        updateEstimatedBytesAvailable();
+        
+        if estimatedBytesAvailable > 0 {
+            print("Verbose: flushSSLBuffers() - Flushing ssl buffers into prebuffer...")
+            var done = false
+            repeat {
+                print("Verbose: flushSSLBuffers() - estimatedBytesAvailable = \(estimatedBytesAvailable)")
+                // Make sure there's enough room in the prebuffer
+                thePreBuffer.ensureCapacityForWrite(size_t(estimatedBytesAvailable))
+                
+                //TODO: check if we can convert UnsafeMutablePointer<CInt> to ContinousArray
+                // Read data into prebuffer
+                let buffer = thePreBuffer.writeBuffer()
+                var bytesRead = 0
+                let result = withUnsafeMutablePointer(&bytesRead) {
+                    return SSLRead(theSslContext, buffer, size_t(estimatedBytesAvailable), $0)
+                }
+                print("Verbose: flushSSLBuffers() - ead from secure socket = \(bytesRead)")
+                
+                if bytesRead > 0 {
+                    thePreBuffer.didWrite(bytes: bytesRead)
+                }
+                print("Verbose: flushSSLBuffers() - prebuffer.length = \(thePreBuffer.availableBytes())")
+                if result != noErr {
+                    done = true
+                }else{
+                    updateEstimatedBytesAvailable()
+                }
+                
+            }while !done && estimatedBytesAvailable > 0
+        }
     }
     func doReadData() {
+        // This method is called on the socketQueue.
+        // It might be called directly, or via the readSource when data is available to be read.
+        guard let theCurrentRead = currentRead else {
+            print("Warning: currentRead is nil")
+            return
+        }
+        if currentRead == nil || flags.contains(.ReadsPaused) {
+            print("Verbose: No currentRead or .ReadsPaused")
+            // Unable to read at this time
+            if flags.contains(.SocketSecure) {
+                // We have an established secure connection.
+                // There may not be a currentRead, but there might be encrypted data sitting around for us.
+                // When the user does get around to issuing a read, that encrypted data will need to be decrypted.
+                //
+                // So why make the user wait?
+                // We might as well get a head start on decrypting some data now.
+                //
+                // The other reason we do this has to do with detecting a socket disconnection.
+                // The SSL/TLS protocol has it's own disconnection handshake.
+                // So when a secure socket is closed, a "goodbye" packet comes across the wire.
+                // We want to make sure we read the "goodbye" packet so we can properly detect the TCP disconnection.
+                flushSSLBuffers()
+            }
+            
+            if usingCFStreamForTLS() {
+                // CFReadStream only fires once when there is available data.
+                // It won't fire again until we've invoked CFReadStreamRead.
+            }else{
+                // If the readSource is firing, we need to pause it
+                // or else it will continue to fire over and over again.
+                //
+                // If the readSource is not firing,
+                // we want it to continue monitoring the socket.
+                if socketFDBytesAvailable > 0 {
+                    suspendReadSource()
+                }
+            }
+        }
         
+        var hasBytesAvailable = false
+        var estimatedBytesAvailable : Int = 0
+        if usingCFStreamForTLS() {
+            #if iOS
+            // Requested CFStream, rather than SecureTransport, for TLS (via GCDAsyncSocketUseCFStreamForTLS)
+            estimatedBytesAvailable = 0
+                if flags.contains(.SecureSocketHasBytesAvailable) && CFReadStreamHasBytesAvailable(readStream) {
+                    hasBytesAvailable = true
+                }else{
+                    hasBytesAvailable = false
+                }
+            #endif
+        }else{
+            estimatedBytesAvailable = Int(socketFDBytesAvailable)
+            if flags.contains(.SocketSecure) {
+                // There are 2 buffers to be aware of here.
+                //
+                // We are using SecureTransport, a TLS/SSL security layer which sits atop TCP.
+                // We issue a read to the SecureTranport API, which in turn issues a read to our SSLReadFunction.
+                // Our SSLReadFunction then reads from the BSD socket and returns the encrypted data to SecureTransport.
+                // SecureTransport then decrypts the data, and finally returns the decrypted data back to us.
+                //
+                // The first buffer is one we create.
+                // SecureTransport often requests small amounts of data.
+                // This has to do with the encypted packets that are coming across the TCP stream.
+                // But it's non-optimal to do a bunch of small reads from the BSD socket.
+                // So our SSLReadFunction reads all available data from the socket (optimizing the sys call)
+                // and may store excess in the sslPreBuffer.
+                if let theSslContext = sslContext() where sslPreBuffer != nil {
+                    estimatedBytesAvailable = estimatedBytesAvailable + sslPreBuffer!.availableBytes()
+                    var sslInternalBufSize : size_t = 0
+                    withUnsafeMutablePointer(&sslInternalBufSize){
+                        SSLGetBufferedReadSize(theSslContext, $0)
+                    }
+                    estimatedBytesAvailable += sslInternalBufSize
+                }
+            }
+            hasBytesAvailable = (estimatedBytesAvailable > 0)
+        }
+        if !hasBytesAvailable && (preBuffer == nil || preBuffer!.availableBytes() == 0){
+            print("Verbose: No data available to read.")
+            // No data available to read.
+            
+            if !usingCFStreamForTLS()
+            {
+                // Need to wait for readSource to fire and notify us of
+                // available data in the socket's internal read buffer.
+                
+                resumeReadSource()
+            }
+            return
+        }
+
+        if flags.contains(.StartingReadTLS){
+            print("Verbose: Waiting for SSL/TLS handshake to complete")
+            // The readQueue is waiting for SSL/TLS handshake to complete.
+            if flags.contains(.StartingWriteTLS){
+                if usingSecureTransportForTLS() && lastSSLHandshakeError == errSSLWouldBlock {
+                    // We are in the process of a SSL Handshake.
+                    // We were waiting for incoming data which has just arrived.
+                    ssl_continueSSLHandshake()
+                }
+            }else{
+                // We are still waiting for the writeQueue to drain and start the SSL/TLS process.
+                // We now know data is available to read.
+                
+                if !usingCFStreamForTLS()
+                {
+                    // Suspend the read source or else it will continue to fire nonstop.
+                    suspendReadSource()
+                }
+            }
+            return
+        }
+        
+        var done = false // Completed read operation
+        var error:ErrorType? = nil // Error occurred
+        var totalBytesReadForCurrentRead = 0
+        
+        
+        
+        //
+        // STEP 1 - READ FROM PREBUFFER
+        //
+        if let thePreBuffer = preBuffer where preBuffer!.availableBytes() > 0 {
+            // There are 3 types of read packets:
+            //
+            // 1) Read all available data.
+            // 2) Read a specific length of data.
+            // 3) Read up to a particular terminator
+            var bytesToCopy = 0
+            if currentRead != nil {
+                if theCurrentRead.term != nil {
+                    // Read type #3 - read up to a terminator
+                    bytesToCopy = theCurrentRead.readLengthForTermWithPreBuffer(thePreBuffer, found: &done)
+                    
+                }else{
+                    // Read type #1 or #2
+                    bytesToCopy = theCurrentRead.readLengthForNonTermWithHint(thePreBuffer.availableBytes())
+                }
+                // Make sure we have enough room in the buffer for our read.
+                theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToCopy)
+                // Copy bytes from prebuffer into packet buffer
+                guard let packetBuffer = theCurrentRead.buffer else {
+                    print("Warning: read buffer was nil in doReadData()")
+                    return
+                }
+                packetBuffer.appendBytes(thePreBuffer.readBuffer(), length: bytesToCopy)
+                // Remove the copied bytes from the preBuffer
+                thePreBuffer.didRead(bytes: bytesToCopy)
+                print("Verbose: copied:\(bytesToCopy) preBufferLength:\(thePreBuffer.availableBytes())")
+                
+                // Update totals
+                theCurrentRead.bytesDone += bytesToCopy
+                totalBytesReadForCurrentRead += bytesToCopy
+                
+                // Check to see if the read operation is done
+                if theCurrentRead.readLength > 0 {
+                    // Read type #2 - read a specific length of data
+                    done = theCurrentRead.bytesDone == theCurrentRead.readLength
+                }else if theCurrentRead.term != nil {
+                    // Read type #3 - read up to a terminator
+                    // Our 'done' variable was updated via the readLengthForTermWithPreBuffer:found: method
+                    if !done && theCurrentRead.maxLength > 0 {
+                        // We're not done and there's a set maxLength.
+                        // Have we reached that maxLength yet?
+                        if theCurrentRead.bytesDone >= theCurrentRead.maxLength {
+                            error = GCDAsyncSocketError.ReadMaxedOutError()
+                        }
+                    }
+                }else{
+                    // Read type #1 - read all available data
+                    //
+                    // We're done as soon as
+                    // - we've read all available data (in prebuffer and socket)
+                    // - we've read the maxLength of read packet.
+                    done = theCurrentRead.maxLength > 0 && theCurrentRead.bytesDone == theCurrentRead.maxLength
+                }
+            }
+        }
+        //
+        // STEP 2 - READ FROM SOCKET
+        //
+        var socketEOF = flags.contains(.SocketHasReadEOF)// Nothing more to read via socket (end of file)
+        var waiting = !done && error == nil && !socketEOF && !hasBytesAvailable// Ran out of data, waiting for more
+        var bytesRead = 0
+        var bytesToRead = 0
+        var readIntoPreBuffer = false
+        var buffer : UnsafeMutablePointer<CInt>? = nil
+        
+        if !done && error == nil && !socketEOF && hasBytesAvailable {
+            guard let thePreBuffer = preBuffer where preBuffer!.availableBytes() > 0 else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid logic. We aren't done, we don't have errors and there isn't any data available."))
+                return;
+            }
+            
+            
+            
+            if flags.contains(.SocketSecure) {
+                if usingCFStreamForTLS() {
+                    #if iOS
+                    // Using CFStream, rather than SecureTransport, for TLS
+                    let defaultReadLength = 1024 * 32
+                    let bytesToRead = theCurrentRead.optimalReadLengthWithDefault(defaultReadLength, shouldPreBuffer: &readIntoPreBuffer)
+                    // Make sure we have enough room in the buffer for our read.
+                    //
+                    // We are either reading directly into the currentRead->buffer,
+                    // or we're reading into the temporary preBuffer.
+                    if readIntoPreBuffer {
+                        thePreBuffer.ensureCapacityForWrite(bytesToRead)
+                        buffer = thePreBuffer.writeBuffer()
+                    }else if let packetBuffer = theCurrentRead.buffer {
+                        theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
+                        buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
+                        buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                    }
+                    // Read data into buffer
+                    let result:CFIndex = CFReadStream(readStream, buffer, bytesToRead)
+                    print("Verbose: CFReadStreamRead(): result = \(result)")
+                    if result < 0 {
+                        error = CFReadStreamCopyError(readStream)
+                    }else if result == 0 {
+                        socketEOF = true
+                    }else{
+                        waiting = true
+                        bytesRead = result
+                    }
+                        
+                    #endif
+                }else{
+                    // Using SecureTransport for TLS
+                    //
+                    // We know:
+                    // - how many bytes are available on the socket
+                    // - how many encrypted bytes are sitting in the sslPreBuffer
+                    // - how many decypted bytes are sitting in the sslContext
+                    //
+                    // But we do NOT know:
+                    // - how many encypted bytes are sitting in the sslContext
+                    //
+                    // So we play the regular game of using an upper bound instead.
+                    var defaultReadLength:Int = 1024 * 32
+                    if defaultReadLength < estimatedBytesAvailable {
+                        defaultReadLength = estimatedBytesAvailable + 1024 * 16
+                    }
+                    bytesToRead = theCurrentRead.optimalReadLengthWithDefault(defaultReadLength, shouldPreBuffer: &readIntoPreBuffer)
+                    if bytesToRead > Int.max {// NSUInteger may be bigger than size_t
+                        bytesToRead = Int.max
+                    }
+                    
+                    // Make sure we have enough room in the buffer for our read.
+                    //
+                    // We are either reading directly into the currentRead->buffer,
+                    // or we're reading into the temporary preBuffer.
+                    if readIntoPreBuffer {
+                        thePreBuffer.ensureCapacityForWrite(bytesToRead)
+                        buffer = thePreBuffer.writeBuffer()
+                    }else if let packetBuffer = theCurrentRead.buffer {
+                        theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
+                        buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
+                        buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                    }
+                    
+                    // The documentation from Apple states:
+                    //
+                    //     "a read operation might return errSSLWouldBlock,
+                    //      indicating that less data than requested was actually transferred"
+                    //
+                    // However, starting around 10.7, the function will sometimes return noErr,
+                    // even if it didn't read as much data as requested. So we need to watch out for that.
+                    var result : OSStatus = 0
+                    repeat {
+                        guard let loopBuffer = buffer else {
+                            error = GCDAsyncSocketError.OtherError(message: "Failed to get buffer in doReadData")
+                            return;
+                        }
+                        guard let theSslContext = sslContext() else {
+                            error = GCDAsyncSocketError.OtherError(message: "Failed to get buffer in doReadData")
+                            return;
+                        }
+                        loopBuffer.advancedBy(bytesRead)
+                        let loopBytesToRead = bytesToRead - bytesRead
+                        var loopBytesRead = 0
+                        result = SSLRead(theSslContext, loopBuffer, loopBytesToRead, &loopBytesRead)
+                    }while result == noErr && bytesRead < bytesToRead
+                    
+                    if result != noErr {
+                        if result == errSSLWouldBlock {
+                            waiting = true
+                        }else{
+                            if result == errSSLClosedGraceful || result == errSSLClosedAbort {
+                                // We've reached the end of the stream.
+                                // Handle this the same way we would an EOF from the socket.
+                                socketEOF = true
+                                sslErrCode = result
+                            }else{
+                                error = GCDAsyncSocketError.SSLError(message:"Error code \(result) definition can be found in Apple's SecureTransport.h")
+                            }
+                        }
+                        // It's possible that bytesRead > 0, even if the result was errSSLWouldBlock.
+                        // This happens when the SSLRead function is able to read some data,
+                        // but not the entire amount we requested.
+                        if bytesRead >= 0 {
+                            bytesRead = 0
+                        }
+                    }
+                    
+                    // Do not modify socketFDBytesAvailable.
+                    // It will be updated via the SSLReadFunction().
+                }
+            }else{
+                // Normal socket operation
+                
+                // There are 3 types of read packets:
+                //
+                // 1) Read all available data.
+                // 2) Read a specific length of data.
+                // 3) Read up to a particular terminator.
+                if theCurrentRead.term != nil {
+                    // Read type #3 - read up to a terminator
+                    bytesToRead = theCurrentRead.readLengthForTermWithHint(estimatedBytesAvailable, shouldPreBuffer: &readIntoPreBuffer)
+                }else{
+                    // Read type #1 or #2
+                    bytesToRead = theCurrentRead.readLengthForNonTermWithHint(estimatedBytesAvailable)
+                }
+                if bytesToRead > Int.max {
+                    bytesToRead = Int.max
+                }
+                
+                // Make sure we have enough room in the buffer for our read.
+                //
+                // We are either reading directly into the currentRead->buffer,
+                // or we're reading into the temporary preBuffer.
+                if readIntoPreBuffer {
+                    thePreBuffer.ensureCapacityForWrite(bytesToRead)
+                    buffer = thePreBuffer.writeBuffer()
+                }else if let packetBuffer = theCurrentRead.buffer {
+                    theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
+                    buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
+                    buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                }
+                // Read data into buffer
+                guard let theBuffer = buffer else {
+                    error = GCDAsyncSocketError.OtherError(message: "Invalid buffer in doReadData()")
+                    return
+                }
+                let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
+                let result = read(socketFD, theBuffer, size_t(bytesToRead))
+                print("Verbose: read from socket = \(result)")
+                
+                if result < 0 {
+                    if errno == EWOULDBLOCK {
+                        waiting = true
+                    }else{
+                        error = GCDAsyncSocketError.PosixError(message: "Error in read() function")
+                        socketFDBytesAvailable = 0
+                    }
+                }else if result == 0 {
+                    socketEOF = true
+                    socketFDBytesAvailable = 0
+                }else {
+                    bytesRead = result
+                    if bytesRead < bytesToRead {
+                        // The read returned less data than requested.
+                        // This means socketFDBytesAvailable was a bit off due to timing,
+                        // because we read from the socket right when the readSource event was firing.
+                        socketFDBytesAvailable = 0
+                    }else{
+                        if socketFDBytesAvailable <= UInt(bytesRead) {
+                            socketFDBytesAvailable = 0
+                        }else{
+                            socketFDBytesAvailable -= UInt(bytesToRead)
+                        }
+                    }
+                }
+                
+                if socketFDBytesAvailable == 0 {
+                    waiting = true
+                }
+            }
+        }
+        if bytesRead > 0 {
+            // Check to see if the read operation is done
+            if theCurrentRead.readLength > 0 {
+                // Read type #2 - read a specific length of data
+                //
+                // Note: We should never be using a prebuffer when we're reading a specific length of data.
+                guard readIntoPreBuffer == false else {
+                    closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid logic. Specified a length to read but we can't read from prebuffer"))
+                    return;
+                }
+                theCurrentRead.bytesDone += bytesRead
+                totalBytesReadForCurrentRead += bytesRead
+                done = theCurrentRead.bytesDone == theCurrentRead.readLength
+            }else if theCurrentRead.term != nil {
+                // Read type #3 - read up to a terminator
+                if readIntoPreBuffer {
+                    // We just read a big chunk of data into the preBuffer
+                    guard let thePreBuffer = preBuffer else {
+                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Specified to readIntoPrebuffer but prebuffer was nil"))
+                        return;
+                    }
+                    thePreBuffer.didWrite(bytes: bytesToRead)
+                    print("Verbose: read data into preBuffer - preBuffer.length = \(thePreBuffer.availableBytes)")
+                    // Search for the terminating sequence
+                    let bytesToCopy = theCurrentRead.readLengthForTermWithPreBuffer(thePreBuffer, found: &done)
+                    print("Verbose: copying \(bytesToCopy) bytes from preBuffer")
+                    // Ensure there's room on the read packet's buffer
+                    theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToCopy)
+                    // Copy bytes from prebuffer into read buffer
+                    guard let packetBuffer = theCurrentRead.buffer else {
+                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "read buffer was nil"))
+                        return;
+                    }
+                    packetBuffer.appendBytes(thePreBuffer.readBuffer(), length: bytesToCopy)
+//                    guard let readBuf:UnsafeMutablePointer<CInt> = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes) else {
+//                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Failed to get the read buffer"))
+//                        return
+//                    }
+//                    readBuf.advancedBy(theCurrentRead.startOffset+theCurrentRead.bytesDone)
+//                    readBuf.initializeFrom(thePreBuffer.readBuffer(), count: bytesToCopy)
+                    
+                    // Remove the copied bytes from the prebuffer
+                    thePreBuffer.didRead(bytes: bytesToCopy)
+                    print("Verbose: preBuffer.length = \(thePreBuffer.availableBytes())")
+                    
+                    // Update totals
+                    theCurrentRead.bytesDone = bytesToCopy
+                    totalBytesReadForCurrentRead += bytesToCopy
+                    // Our 'done' variable was updated via the readLengthForTermWithPreBuffer:found: method above
+                }else{
+                    // We just read a big chunk of data directly into the packet's buffer.
+                    // We need to move any overflow into the prebuffer.
+                    let overflow = theCurrentRead.searchForTermAfterPreBuffering(numberOfBytes: bytesRead)
+                    if overflow == 0 {
+                        // Perfect match!
+                        // Every byte we read stays in the read buffer,
+                        // and the last byte we read was the last byte of the term.
+                        theCurrentRead.bytesDone += bytesRead
+                        totalBytesReadForCurrentRead += bytesRead
+                        done = true
+                    }else if overflow > 0 {
+                        // The term was found within the data that we read,
+                        // and there are extra bytes that extend past the end of the term.
+                        // We need to move these excess bytes out of the read packet and into the prebuffer.
+                        let underflow = bytesRead - overflow
+                        
+                        // Copy excess data into preBuffer
+                        print("Verbose: copying \(overflow) overflow bytes into preBuffer")
+                        guard let thePreBuffer = preBuffer else {
+                            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "The prebuffer was nil"))
+                            return;
+                        }
+                        thePreBuffer.ensureCapacityForWrite(overflow)
+                        
+                        guard let overflowBuffer = buffer?.advancedBy(overflow) else {
+                            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Failed to get the overflow buffer"))
+                            return;
+                        }
+                        thePreBuffer.writeBuffer().initializeFrom(UnsafeMutablePointer<CInt>(overflowBuffer), count: overflow)
+                        
+                        thePreBuffer.didWrite(bytes: overflow)
+                        print("Verbose: preBuffer.length = \(thePreBuffer.availableBytes())")
+                        // Note: The completeCurrentRead method will trim the buffer for us.
+                        theCurrentRead.bytesDone += underflow
+                        totalBytesReadForCurrentRead += underflow
+                        done = true
+                    }else{
+                        // The term was not found within the data that we read.
+                        theCurrentRead.bytesDone += bytesRead
+                        totalBytesReadForCurrentRead += bytesRead
+                        done = false
+                    }
+                }
+                if !done && theCurrentRead.maxLength > 0 {
+                    // We're not done and there's a set maxLength.
+                    // Have we reached that maxLength yet?
+                    if theCurrentRead.bytesDone >= theCurrentRead.maxLength {
+                        error = GCDAsyncSocketError.ReadMaxedOutError()
+                    }
+                }
+            }else{
+                // Read type #1 - read all available data
+                if readIntoPreBuffer {
+                    // We just read a chunk of data into the preBuffer
+                    guard let thePreBuffer = preBuffer else {
+                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Specified to readIntoPrebuffer but prebuffer was nil"))
+                        return;
+                    }
+                    // Now copy the data into the read packet.
+                    //
+                    // Recall that we didn't read directly into the packet's buffer to avoid
+                    // over-allocating memory since we had no clue how much data was available to be read.
+                    //
+                    // Ensure there's room on the read packet's buffer
+                    theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesRead)
+                    // Copy bytes from prebuffer into read buffer
+                    guard let packetBuffer = theCurrentRead.buffer else {
+                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "read buffer was nil"))
+                        return;
+                    }
+                    packetBuffer.appendBytes(thePreBuffer.readBuffer(), length: bytesRead)
+                    thePreBuffer.didRead(bytes: bytesRead)
+                    
+                    // Update totals
+                    theCurrentRead.bytesDone += bytesRead
+                    totalBytesReadForCurrentRead += bytesRead
+                }else{
+                    theCurrentRead.bytesDone += bytesRead
+                    totalBytesReadForCurrentRead += bytesRead
+                }
+                done = true
+            }//if bytesRead > 0
+        }// if (!done && !error && !socketEOF && hasBytesAvailable)
+        
+        if !done && theCurrentRead.readLength == 0 && theCurrentRead.term == nil {
+            // Read type #1 - read all available data
+            //
+            // We might arrive here if we read data from the prebuffer but not from the socket.
+            done = totalBytesReadForCurrentRead > 0
+        }
+        // Check to see if we're done, or if we've made progress
+        if done {
+            completeCurrentRead()
+            if error == nil && (!socketEOF || preBuffer?.availableBytes() > 0){
+                maybeDequeueRead()
+            }
+        }else if totalBytesReadForCurrentRead > 0 {
+            // We're not done read type #2 or #3 yet, but we have read in some bytes
+            if let theDelegate = delegate {
+                let theReadTag = theCurrentRead.tag
+                dispatch_async(delegateQueue!){
+                    theDelegate.socket(self, didReadPartialDataOfLength: totalBytesReadForCurrentRead, tag: theReadTag)
+                }
+            }
+        }
+        // Check for errors
+        if error != nil {
+            closeSocket(withError: error)
+        }else if socketEOF {
+            doReadEOF()
+        }else if waiting {
+            if !usingCFStreamForTLS() {
+                // Monitor the socket for readability (if we're not already doing so)
+                resumeReadSource()
+            }
+        }
+        // Do not add any code here without first adding return statements in the error cases above.
     }
     func doReadEOF() {
         
