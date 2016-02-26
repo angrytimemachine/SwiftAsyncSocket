@@ -86,11 +86,12 @@ struct GCDAsyncSocketConfig : OptionSetType {
 enum GCDAsyncSocketError: ErrorType {
     case TimeoutError()
     case ReadMaxedOutError()
+    case ConnectionClosedError()
     case PosixError(message:String)
     case BadConfigError(message:String)
     case BadParamError(message:String)
     case OtherError(message:String)
-    case SSLError(message:String)
+    case SSLError(code:OSStatus)
     
     
     var description : String {
@@ -98,11 +99,12 @@ enum GCDAsyncSocketError: ErrorType {
             switch (self) {
             case .TimeoutError: return "Attempt to connect to host timed out"
             case .ReadMaxedOutError: return "Read operation reached set maximum length"
+            case .ConnectionClosedError: return "Socket closed by remote peer"
             case let .PosixError(message): return message
             case let .BadConfigError(message): return message
             case let .BadParamError(message): return message
             case let .OtherError(message): return message
-            case let .SSLError(message): return message
+            case let .SSLError(code): return "Error code \(code) definition can be found in Apple's SecureTransport.h"
             }
         }
     }
@@ -3423,7 +3425,7 @@ class GCDAsyncSocket {
                                 socketEOF = true
                                 sslErrCode = result
                             }else{
-                                error = GCDAsyncSocketError.SSLError(message:"Error code \(result) definition can be found in Apple's SecureTransport.h")
+                                error = GCDAsyncSocketError.SSLError(code:result)
                             }
                         }
                         // It's possible that bytesRead > 0, even if the result was errSSLWouldBlock.
@@ -3677,22 +3679,215 @@ class GCDAsyncSocket {
         // Do not add any code here without first adding return statements in the error cases above.
     }
     func doReadEOF() {
+        // This method may be called more than once.
+        // If the EOF is read while there is still data in the preBuffer,
+        // then this method may be called continually after invocations of doReadData to see if it's time to disconnect.
+        flags.append(.SocketHasReadEOF)
+        if flags.contains(.SocketSecure) {
+            // If the SSL layer has any buffered data, flush it into the preBuffer now.
+            flushSSLBuffers()
+        }
         
+        var shouldDisconnect = false
+        var error:ErrorType? = nil
+        
+        if flags.contains(.StartingReadTLS) || flags.contains(.StartingWriteTLS) {
+            // We received an EOF during or prior to startTLS.
+            // The SSL/TLS handshake is now impossible, so this is an unrecoverable situation.
+            shouldDisconnect = true
+            if usingSecureTransportForTLS() {
+                error = GCDAsyncSocketError.SSLError(code: errSSLClosedAbort)
+            }
+        }else if flags.contains(.ReadStreamClosed) {
+            // The preBuffer has already been drained.
+            // The config allows half-duplex connections.
+            // We've previously checked the socket, and it appeared writeable.
+            // So we marked the read stream as closed and notified the delegate.
+            //
+            // As per the half-duplex contract, the socket will be closed when a write fails,
+            // or when the socket is manually closed.
+            shouldDisconnect = true
+        }else if preBuffer?.availableBytes() > 0 {
+            print("Verbose: Socket reached EOF, but there is still data available in prebuffer")
+            // Although we won't be able to read any more data from the socket,
+            // there is existing data that has been prebuffered that we can read.
+            shouldDisconnect = true
+        }else if config.contains(.AllowHalfDuplexConnection) {
+            // We just received an EOF (end of file) from the socket's read stream.
+            // This means the remote end of the socket (the peer we're connected to)
+            // has explicitly stated that it will not be sending us any more data.
+            //
+            // Query the socket to see if it is still writeable. (Perhaps the peer will continue reading data from us)
+            let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
+            var pfd = [pollfd].init(count: 2, repeatedValue: pollfd())
+            pfd[0].fd = socketFD
+            pfd[0].events = Int16(POLLOUT)
+            pfd[0].revents = 0
+            //poll(&pfd[0], 1, 0)
+            withUnsafeMutablePointer(&pfd[0]){
+                poll($0, 1, 0)
+            }
+            let fd:pollfd = pfd[0]
+            if fd.revents & Int16(POLLOUT) == Int16(POLLOUT) {
+                // Socket appears to still be writeable
+                shouldDisconnect = false
+                flags.append(.ReadStreamClosed)
+                // Notify the delegate that we're going half-duplex
+                if let theDelegate = _delegate , let theDelegateQueue = _delegateQueue {
+                    dispatch_async(theDelegateQueue){
+                        autoreleasepool{
+                            theDelegate.socketDidCloseReadStream(self)
+                        }
+                    }
+                }
+            }else{
+                shouldDisconnect = true
+            }
+        }else{
+            shouldDisconnect = true
+        }
+        
+        if shouldDisconnect {
+            if error == nil {
+                if usingSecureTransportForTLS() {
+                    if sslErrCode != noErr && sslErrCode != errSSLClosedGraceful {
+                        error = GCDAsyncSocketError.SSLError(code: sslErrCode)
+                    }else{
+                        error = GCDAsyncSocketError.ConnectionClosedError()
+                    }
+                }else{
+                    error = GCDAsyncSocketError.ConnectionClosedError()
+                }
+            }
+            closeSocket(withError: error)
+        }else{
+            if usingCFStreamForTLS() {
+                // Suspend the read source (if needed)
+                suspendReadSource()
+            }
+        }
     }
     func completeCurrentRead() {
-        
+        guard let theCurrentRead = currentRead else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Trying to complete current read when there is no current read."))
+            return
+        }
+        var result:NSData? = nil
+        if theCurrentRead.bufferOwner {
+            // We created the buffer on behalf of the user.
+            // Trim our buffer to be the proper size.
+            theCurrentRead.buffer?.length = theCurrentRead.bytesDone
+            result = theCurrentRead.buffer
+        }else{
+            // We did NOT create the buffer.
+            // The buffer is owned by the caller.
+            // Only trim the buffer if we had to increase its size.
+            guard let packetBuffer = theCurrentRead.buffer else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Read buffer was nil"))
+                return
+            }
+            if packetBuffer.length > theCurrentRead.originalBufferLength {
+                let readSize = theCurrentRead.startOffset + theCurrentRead.bytesDone
+                let origSize = theCurrentRead.originalBufferLength
+                let buffSize = readSize > origSize ? readSize : origSize
+                packetBuffer.length = buffSize
+            }
+            let buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
+            buffer.advancedBy(theCurrentRead.startOffset)
+            result = NSData.init(bytesNoCopy: buffer, length: theCurrentRead.bytesDone, freeWhenDone:false)
+        }
+        if let theDelegate = _delegate , let theDelegateQueue = _delegateQueue {
+            if let resultData = result {
+                dispatch_async(theDelegateQueue){
+                    autoreleasepool{
+                        theDelegate.socket(self, didReadData:resultData , withTag: theCurrentRead.tag)
+                    }
+                }
+            }
+        }
+        endCurrentRead()
     }
     func endCurrentRead() {
-        
+        if let theReadTimer = readTimer {
+            dispatch_source_cancel(theReadTimer)
+            readTimer = nil
+        }
+        currentRead = nil
     }
     func setupReadTimerWithTimeout(timeout:NSTimeInterval) {
-        
+        guard timeout >= 0.0 else{
+            return
+        }
+        readTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, socketQueue)
+        dispatch_source_set_event_handler(readTimer!){
+            autoreleasepool{
+                [weak self] in
+                guard let strongSelf = self else {
+                    return
+                }
+                strongSelf.doReadTimeout()
+            }
+        }
+        //using ARC, don't need this
+//        #if !OS_OBJECT_USE_OBJC
+//            dispatch_source_t theReadTimer = readTimer;
+//            dispatch_source_set_cancel_handler(readTimer, ^{
+//                #pragma clang diagnostic push
+//                #pragma clang diagnostic warning "-Wimplicit-retain-self"
+//                
+//                LogVerbose(@"dispatch_release(readTimer)");
+//                dispatch_release(theReadTimer);
+//                
+//                #pragma clang diagnostic pop
+//                });
+//        #endif
+        let tt = dispatch_time(DISPATCH_TIME_NOW, Int64(timeout)*Int64(NSEC_PER_SEC))
+        dispatch_source_set_timer(readTimer!, tt, DISPATCH_TIME_FOREVER, 0)
+        dispatch_resume(readTimer!)
     }
     func doReadTimeout() {
-        
+        // This is a little bit tricky.
+        // Ideally we'd like to synchronously query the delegate about a timeout extension.
+        // But if we do so synchronously we risk a possible deadlock.
+        // So instead we have to do so asynchronously, and callback to ourselves from within the delegate block.
+        flags.append(.ReadsPaused)
+        guard let theDelegate = delegate, let theCurrentRead = currentRead else {
+            return
+        }
+        if let theDelegateQueue = delegateQueue  {
+            dispatch_async(theDelegateQueue){
+                autoreleasepool {
+                    let timeoutExtension = theDelegate.socket(self, shouldTimeoutWriteWithTag: theCurrentRead.tag, elapsed: theCurrentRead.timeout, bytesDone: theCurrentRead.bytesDone)
+                    dispatch_async(self.socketQueue){
+                        [weak self] in
+                        autoreleasepool{
+                            self?.doReadTimeoutWithExtension(timeoutExtension)
+                        }
+                    }
+                }
+            }
+        }else{
+            doReadTimeoutWithExtension(0.0)
+        }
     }
     func doReadTimeoutWithExtension(timeoutExtension:NSTimeInterval) {
-        
+        if timeoutExtension > 0.0 {
+            if let theCurrentRead = currentRead {
+                theCurrentRead.timeout += timeoutExtension
+                // Reschedule the timer
+                let tt = dispatch_time(DISPATCH_TIME_NOW, Int64(timeoutExtension)*Int64(NSEC_PER_SEC))
+                dispatch_source_set_timer(readTimer!, tt, DISPATCH_TIME_FOREVER, 0)
+                
+                // Unpause reads, and continue
+                if let index = flags.indexOf(.ReadsPaused) {
+                    flags.removeAtIndex(index)
+                }
+                doReadData()
+            }
+        }else{
+            print("Verbose: ReadTimeout")
+            closeSocket(withError: GCDAsyncSocketError.TimeoutError())
+        }
     }
      
      /***********************************************************/
