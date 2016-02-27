@@ -12,16 +12,17 @@ import Foundation
  * The GCDAsyncWritePacket encompasses the instructions for any given write.
  **/
 
-class GCDAsyncWritePacket {
-    var buffer : NSMutableData
+class GCDAsyncWritePacket : GCDAsyncSpecialPacket {
+    var buffer : NSData
     var bytesDone : Int
     var tag : Int
     var timeout : NSTimeInterval
     
-    init(withData d : NSMutableData, timeout t : NSTimeInterval, tag i : Int){
+    init(withData d : NSData, timeout t : NSTimeInterval, tag i : Int){
         buffer = d
         bytesDone = 0
         timeout = t
         tag = i
+        super.init()
     }
 }

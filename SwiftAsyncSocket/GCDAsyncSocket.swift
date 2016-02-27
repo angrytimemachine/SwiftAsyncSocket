@@ -85,6 +85,7 @@ struct GCDAsyncSocketConfig : OptionSetType {
 
 enum GCDAsyncSocketError: ErrorType {
     case TimeoutError()
+    case WriteTimeoutError()
     case ReadMaxedOutError()
     case ConnectionClosedError()
     case PosixError(message:String)
@@ -98,6 +99,7 @@ enum GCDAsyncSocketError: ErrorType {
         get {
             switch (self) {
             case .TimeoutError: return "Attempt to connect to host timed out"
+            case .WriteTimeoutError: return "Write operation timed out"
             case .ReadMaxedOutError: return "Read operation reached set maximum length"
             case .ConnectionClosedError: return "Socket closed by remote peer"
             case let .PosixError(message): return message
@@ -151,10 +153,10 @@ class GCDAsyncSocket {
     var writeTimer : dispatch_source_t? = nil
     
     var readQueue : [GCDAsyncReadPacket] = []
-    var writeQueue : [GCDAsyncReadPacket] = []
+    var writeQueue : [GCDAsyncWritePacket] = []
     
     var currentRead : GCDAsyncReadPacket? = nil
-    var currentWrite : GCDAsyncReadPacket? = nil
+    var currentWrite : GCDAsyncWritePacket? = nil
     
     var socketFDBytesAvailable : UInt = 0
     
@@ -3005,7 +3007,7 @@ class GCDAsyncSocket {
             currentRead = readQueue.first
             readQueue.removeFirst()
             
-            if theCurrentRead is GCDAsyncSpecialPacket {
+            if theCurrentRead.dynamicType == GCDAsyncSpecialPacket.self {
                 print("Verbose: Dequeued GCDAsyncSpecialPacket")
                 // Attempt to start TLS
                 flags.append(.StartingReadTLS)
@@ -3910,15 +3912,54 @@ class GCDAsyncSocket {
      * completes writing the bytes (which is NOT immediately after this method returns, but rather at a later time
      * when the delegate method notifies you), then you should first copy the bytes, and pass the copy to this method.
      **/
-    func writeData(data:NSData?, withTimeout timeout:NSTimeInterval, tag:Int){
-        
+    func writeData(data:NSData, withTimeout timeout:NSTimeInterval, tag:Int){
+        let packet = GCDAsyncWritePacket.init(withData: data, timeout: timeout, tag: tag)
+        guard data.length > 9 else {
+            return
+        }
+        dispatch_async(socketQueue){
+            autoreleasepool{
+                if self.flags.contains(.SocketStarted) && self.flags.contains(.ForbidReadsWrites) {
+                    self.writeQueue.append(packet)
+                    self.maybeDequeueWrite()
+                }
+            }
+        }
+        // Do not rely on the block being run in order to release the packet,
+        // as the queue might get released without the block completing.
     }
     /**
      * Returns progress of the current write, from 0.0 to 1.0, or NaN if no current write (use isnan() to check).
      * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
      **/
-    func progressOfWriteReturningFlag(inout tagPtr:Int, inout bytesDone donePtr:UInt, inout total:UInt) -> Float {
-        return 0.0
+    func progressOfWriteReturningFlag(inout tagPtr:Int, inout bytesDone donePtr:Float, inout totalPtr:Float) -> Float {
+        var result:Float = 0.0
+        
+        let block = {
+            if let theCurrentWrite = self.currentWrite {
+                
+                tagPtr = theCurrentWrite.tag
+                donePtr = Float(theCurrentWrite.bytesDone)
+                totalPtr = Float(theCurrentWrite.buffer.length)
+                
+                result = Float.NaN
+                
+            }else{
+                // We're not writing anything right now.
+                tagPtr = 0
+                donePtr = 0
+                totalPtr = 0
+                
+                result = donePtr / totalPtr
+            }
+        }
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            block()
+        }else{
+            dispatch_sync(socketQueue, block)
+        }
+        
+        return result
     }
     /**
     * Conditionally starts a new write.
@@ -3931,25 +3972,381 @@ class GCDAsyncSocket {
     * This method also handles auto-disconnect post read/write completion.
     **/
     func maybeDequeueWrite() {
-        
+        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        // If we're not currently processing a write AND we have an available write stream
+        guard currentWrite == nil && flags.contains(.Connected) else {
+            return
+        }
+        if writeQueue.count > 0 {
+            // Dequeue the next object in the write queue
+            currentWrite = writeQueue.first
+            writeQueue.removeFirst()
+            
+            if let theCurrentWrite = currentWrite {
+                if theCurrentWrite.dynamicType == GCDAsyncSpecialPacket.self {
+                    print("Verbose: Dequeued GCDAsyncSpecialPacket")
+                    // Attempt to start TLS
+                    flags.append(.StartingWriteTLS)
+                    // This method won't do anything unless both kStartingReadTLS and kStartingWriteTLS are set
+                    maybeStartTLS()
+                }else{
+                    print("Verbose: Dequeued GCDAsyncWritePacket")
+                    // Setup write timer (if needed)
+                    setupWriteTimerWithTimeout(theCurrentWrite.timeout)
+                    // Immediately write, if possible
+                    doWriteData()
+                }
+            }
+            
+        }else if flags.contains(.DisconnectAfterWrites) {
+            if flags.contains(.DisconnectAfterReads) {
+                if readQueue.count == 0 && currentRead == nil {
+                    closeSocket(withError: nil)
+                }
+            }else{
+                closeSocket(withError: nil)
+            }
+        }
     }
     func doWriteData() {
+        // This method is called by the writeSource via the socketQueue
+        if currentWrite == nil || flags.contains(.WritesPaused){
+            print("Verbose: No currentWrite or WritesPaused")
+            // Unable to write at this time
+            if usingCFStreamForTLS(){
+                // CFWriteStream only fires once when there is available data.
+                // It won't fire again until we've invoked CFWriteStreamWrite.
+            }else{
+                // If the writeSource is firing, we need to pause it
+                // or else it will continue to fire over and over again.
+                if flags.contains(.SocketCanAcceptBytes) {
+                    suspendWriteSource()
+                }
+            }
+            return
+        }
+        if !flags.contains(.SocketCanAcceptBytes){
+            print("Verbose: No space available to write...")
+            // No space available to write.
+            if !usingCFStreamForTLS() {
+                // Need to wait for writeSource to fire and notify us of
+                // available space in the socket's internal write buffer.
+                resumeWriteSource()
+            }
+            return
+        }
+        if flags.contains(.StartingWriteTLS) {
+            print("Verbose: Waiting for SSL/TLS handshake to complete")
+            // The writeQueue is waiting for SSL/TLS handshake to complete.
+            if flags.contains(.StartingReadTLS) {
+                if usingSecureTransportForTLS() && lastSSLHandshakeError == errSSLWouldBlock {
+                    // We are in the process of a SSL Handshake.
+                    // We were waiting for available space in the socket's internal OS buffer to continue writing.
+                    ssl_continueSSLHandshake()
+                }
+            }else{
+                // We are still waiting for the readQueue to drain and start the SSL/TLS process.
+                // We now know we can write to the socket.
+                if !usingCFStreamForTLS() {
+                    // Suspend the write source or else it will continue to fire nonstop.
+                    suspendWriteSource()
+                }
+            }
+            return
+        }
         
+        // Note: This method is not called if currentWrite is a GCDAsyncSpecialPacket (startTLS packet)
+        var waiting = false
+        var error:ErrorType? = nil
+        var bytesWritten = 0
+        guard let theCurrentWrite = currentWrite else{
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "currentWrite was nil in doWriteData()"))
+            return
+        }
+        if flags.contains(.SocketSecure){
+            if usingCFStreamForTLS() {
+                #if iOS
+                    //
+                    // Writing data using CFStream (over internal TLS)
+                    //
+                if let theCurrentWrite = currentWrite {
+                    let buffer = theCurrentWrite.buffer.bytes
+                    buffer.advancedBy(theCurrentWrite.bytesDone)
+                    let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone
+//                    if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
+//                    {
+//                        bytesToWrite = SIZE_MAX;
+//                    }
+                    let result = CFWriteStreamWrite(writeStream, UnsafePointer<UInt8>(buffer), bytesToWrite)
+                    if result < 0 {
+                        error = CFWriteStreamCopyError(writeStream)
+                    }else{
+                        bytesWritten = result
+                        // We always set waiting to true in this scenario.
+                        // CFStream may have altered our underlying socket to non-blocking.
+                        // Thus if we attempt to write without a callback, we may end up blocking our queue.
+                        waiting = true
+                    }
+                }
+                #endif
+            }else{
+                guard let theSSLContext = sslContext() else{
+                    closeSocket(withError: GCDAsyncSocketError.OtherError(message: "sslContext was nil in doWriteData()"))
+                    return
+                }
+                var result:OSStatus = 0
+                let hasCachedDataToWrite = sslWriteCachedLength > 0
+                var hasNewDataToWrite = true
+                if hasCachedDataToWrite {
+                    var processed = 0
+                    withUnsafeMutablePointer(&processed){
+                        result = SSLWrite(theSSLContext, nil, 0, $0)
+                    }
+                    if result == noErr {
+                        bytesWritten = sslWriteCachedLength
+                        sslWriteCachedLength = 0
+                        if theCurrentWrite.buffer.length == theCurrentWrite.bytesDone+bytesWritten {
+                            // We've written all data for the current write.
+                            hasNewDataToWrite = false
+                        }
+                    }else{
+                        if result == errSSLWouldBlock{
+                            waiting = true
+                        }else{
+                            error = GCDAsyncSocketError.SSLError(code: result)
+                        }
+                        // Can't write any new data since we were unable to write the cached data.
+                        hasNewDataToWrite = false
+                    }
+                }
+                
+                if hasNewDataToWrite {
+                    let buffer = theCurrentWrite.buffer.bytes
+                    buffer.advancedBy(theCurrentWrite.bytesDone+bytesWritten)
+                    let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone - bytesWritten
+//                    if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
+//                    {
+//                        bytesToWrite = SIZE_MAX;
+//                    }
+                    var bytesRemaining = bytesToWrite
+                    var keepLooping = true
+                    let sslMaxBytesToWrite = 32768
+                    while keepLooping {
+                        let sslBytesToWrite = bytesRemaining < sslMaxBytesToWrite ? bytesRemaining : sslMaxBytesToWrite
+                        var sslBytesWritten = 0
+                        withUnsafeMutablePointer(&sslBytesWritten){
+                            result = SSLWrite(theSSLContext, buffer, sslBytesToWrite, $0)
+                        }
+                        if result == noErr {
+                            buffer.advancedBy(sslBytesWritten)
+                            bytesWritten += sslBytesWritten
+                            bytesRemaining -= sslBytesWritten
+                            keepLooping = bytesRemaining > 0
+                        }else{
+                            if result == errSSLWouldBlock {
+                                waiting = true
+                                sslWriteCachedLength = sslBytesToWrite
+                            }else{
+                                error = GCDAsyncSocketError.SSLError(code: result)
+                            }
+                            keepLooping = false
+                        }
+                    }//while keepLooping
+                }//if hasNewDataToWrite
+            }
+        }else{
+            //
+            // Writing data directly over raw socket
+            //
+            let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
+            let buffer = theCurrentWrite.buffer.bytes
+            buffer.advancedBy(theCurrentWrite.bytesDone)
+            let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone
+//            if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
+//            {
+//                bytesToWrite = SIZE_MAX;
+//            }
+            let result = write(socketFD, buffer, bytesToWrite)
+            print("Verbose: rote to socket = \(result)")
+            
+            // Check results
+            if result < 0 {
+                if errno == EWOULDBLOCK {
+                    waiting = true
+                }else{
+                    error = GCDAsyncSocketError.PosixError(message: "Error in write() function")
+                }
+            }else{
+                bytesWritten = result
+            }
+        }
+        // We're done with our writing.
+        // If we explictly ran into a situation where the socket told us there was no room in the buffer,
+        // then we immediately resume listening for notifications.
+        //
+        // We must do this before we dequeue another write,
+        // as that may in turn invoke this method again.
+        //
+        // Note that if CFStream is involved, it may have maliciously put our socket in blocking mode.
+
+        if waiting {
+            if let index = flags.indexOf(.SocketCanAcceptBytes) {
+                flags.removeAtIndex(index)
+            }
+            if !usingCFStreamForTLS() {
+                resumeWriteSource()
+            }
+        }
+        
+        // Check our results
+        var done = false
+        if bytesWritten > 0 {
+            // Update total amount read for the current write
+            theCurrentWrite.bytesDone += bytesWritten
+            print("Verbose: theCurrentWrite.bytesDone = \(theCurrentWrite.bytesDone)")
+            // Is packet done?
+            done = theCurrentWrite.bytesDone == theCurrentWrite.buffer.length
+        }
+        
+        if done {
+            completeCurrentWrite()
+            if error == nil {
+                dispatch_async(socketQueue){
+                    autoreleasepool {
+                        self.maybeDequeueWrite()
+                    }
+                }
+            }
+        }else{
+            // We were unable to finish writing the data,
+            // so we're waiting for another callback to notify us of available space in the lower-level output buffer.
+            if !waiting && error == nil {
+                // This would be the case if our write was able to accept some data, but not all of it.
+                if let index = flags.indexOf(.SocketCanAcceptBytes) {
+                    flags.removeAtIndex(index)
+                }
+                if !usingCFStreamForTLS(){
+                    resumeWriteSource()
+                }
+            }
+            if bytesWritten > 0 {
+                // We're not done with the entire write, but we have written some bytes
+                if let theDelegate = delegate, let theDelegateQueue = delegateQueue {
+                    let theWriteTag = theCurrentWrite.tag
+                    dispatch_async(theDelegateQueue) {
+                        autoreleasepool{
+                            theDelegate.socket(self, didWritePartialDataOfLength: bytesWritten, tag: theWriteTag)
+                        }
+                    }
+                }
+            }
+        }
+        // Check for errors
+        if error != nil {
+            closeSocket(withError: error)
+        }
     }
     func completeCurrentWrite() {
-        
+        guard let theCurrentWrite = currentWrite else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Trying to complete current write when there is no current write."))
+            return
+        }
+        if let theDelegate = delegate, let theDelegateQueue = delegateQueue {
+            let theWriteTag = theCurrentWrite.tag
+            dispatch_async(theDelegateQueue){
+                autoreleasepool{
+                    theDelegate.socket(self, didWriteDataWithTag: theWriteTag)
+                }
+            }
+        }
+        endCurrentWrite()
     }
     func endCurrentWrite() {
-        
+        if let theWriteTimer = writeTimer {
+            dispatch_source_cancel(theWriteTimer)
+            writeTimer = nil
+        }
+        currentWrite  = nil
     }
     func setupWriteTimerWithTimeout(timeout:NSTimeInterval) {
+        guard timeout >= 0.0 else {
+            return
+        }
+        writeTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, socketQueue)
+        if let theWriteTimer = writeTimer {
+            dispatch_source_set_event_handler(theWriteTimer){
+                autoreleasepool {
+                    [weak self] in
+                    if let strongSelf = self {
+                        strongSelf.doWriteTimeout()
+                    }
+                }
+            }
+            //always using ARC, don't need this
+//            #if !OS_OBJECT_USE_OBJC
+//                dispatch_source_t theWriteTimer = writeTimer;
+//                dispatch_source_set_cancel_handler(writeTimer, ^{
+//                    #pragma clang diagnostic push
+//                    #pragma clang diagnostic warning "-Wimplicit-retain-self"
+//                    
+//                    LogVerbose(@"dispatch_release(writeTimer)");
+//                    dispatch_release(theWriteTimer);
+//                    
+//                    #pragma clang diagnostic pop
+//                    });
+//            #endif
+            
+            let tt = dispatch_time(DISPATCH_TIME_NOW, Int64(timeout)*Int64(NSEC_PER_SEC))
+            dispatch_source_set_timer(theWriteTimer, tt, DISPATCH_TIME_FOREVER, 0);
+            dispatch_resume(theWriteTimer);
+        }
         
+
     }
     func doWriteTimeout() {
+        // This is a little bit tricky.
+        // Ideally we'd like to synchronously query the delegate about a timeout extension.
+        // But if we do so synchronously we risk a possible deadlock.
+        // So instead we have to do so asynchronously, and callback to ourselves from within the delegate block.
+        flags.append(.WritesPaused)
         
+        if let theDelegate = delegate, let theDelegateQueue = delegateQueue, let theCurrentWrite = currentWrite {
+            
+            dispatch_async(theDelegateQueue){
+                autoreleasepool{
+                    let timeoutExtension = theDelegate.socket(self, shouldTimeoutWriteWithTag: theCurrentWrite.tag, elapsed: theCurrentWrite.timeout, bytesDone: theCurrentWrite.bytesDone)
+                    dispatch_async(self.socketQueue, {
+                        autoreleasepool {
+                            self.doReadTimeoutWithExtension(timeoutExtension)
+                        }
+                    })
+                }
+            }
+        }else{
+            doWriteTimeoutWithExtension(0.0)
+        }
     }
     func doWriteTimeoutWithExtension(timeoutExtension:NSTimeInterval) {
-        
+        guard let theCurrentWrite = currentWrite else {
+            return
+        }
+        if timeoutExtension > 0.0 {
+            theCurrentWrite.timeout += timeoutExtension
+            if let theWriteTimer = writeTimer {
+                // Reschedule the timer
+                let tt = dispatch_time(DISPATCH_TIME_NOW, Int64(timeoutExtension)*Int64(NSEC_PER_SEC))
+                dispatch_source_set_timer(theWriteTimer, tt, DISPATCH_TIME_FOREVER, 0);
+            }
+            
+            // Unpause writes, and continue
+            if let index = flags.indexOf(.WritesPaused) {
+                flags.removeAtIndex(index)
+            }
+            doWriteData()
+        }else{
+            print("Verbose: WriteTimeout")
+            closeSocket(withError: GCDAsyncSocketError.WriteTimeoutError())
+        }
     }
      
      /***********************************************************/

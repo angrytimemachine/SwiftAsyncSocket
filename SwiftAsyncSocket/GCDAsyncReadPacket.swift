@@ -16,7 +16,7 @@ import Foundation
  *  - or simply reading the first chunk of available data
  **/
 
-class GCDAsyncReadPacket {
+class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
     var buffer: NSMutableData?
     var startOffset: Int
     var bytesDone: Int
@@ -55,6 +55,7 @@ class GCDAsyncReadPacket {
         }else{
             buffer = nil
         }
+        super.init()
     }
     /**
     * Increases the length of the buffer (if needed) to ensure a read of the given size will fit.

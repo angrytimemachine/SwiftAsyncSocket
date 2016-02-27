@@ -6152,7 +6152,7 @@ enum GCDAsyncSocketConfig
 		[self closeWithError:[self errnoErrorWithReason:@"Error in write() function"]];
 	}
 	
-	// Do not add any code here without first adding a return statement in the error case above.
+	
 }
 
 - (void)completeCurrentWrite

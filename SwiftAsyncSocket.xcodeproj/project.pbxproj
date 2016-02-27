@@ -104,11 +104,11 @@
 				382AD4981C670EE400698988 /* SwiftAsyncSocket.h */,
 				382AD49A1C670EE400698988 /* Info.plist */,
 				382AD4B21C67116700698988 /* GCDAsyncSocket.swift */,
-				382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */,
 				382AD4B31C67116700698988 /* GCDAsyncSocketDelegate.swift */,
 				382AD4B41C67116700698988 /* GCDAsyncSocketPreBuffer.swift */,
-				382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */,
+				382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */,
 				382AD4B61C67116700698988 /* GCDAsyncWritePacket.swift */,
+				382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */,
 				3883B2021C6F095F0000AC45 /* sockaddr_un_extension.swift */,
 			);
 			path = SwiftAsyncSocket;
