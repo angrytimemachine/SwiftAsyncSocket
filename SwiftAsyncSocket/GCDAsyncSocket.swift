@@ -8,7 +8,7 @@
 
 /*
     TODO: replace Security framework with OpenSSL?
-
+    TODO: use self.dynamicType.classFunction instead of GCDAsyncSocket.classFunction
 */
 
 
@@ -5315,10 +5315,31 @@ class GCDAsyncSocket {
      * The default value is YES.
      **/
     func autoDisconnectOnClosedReadStream() -> Bool {
-        return false
+        // Note: YES means kAllowHalfDuplexConnection is OFF
+        var result:Bool = false
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            result = !config.contains(.AllowHalfDuplexConnection)
+        }else{
+            dispatch_sync(socketQueue){
+                result = !self.config.contains(.AllowHalfDuplexConnection)
+            }
+        }
+        return result
     }
     func setAutoDisconnectOnClosedReadStream(flag:Bool) {
-        
+        // Note: YES means kAllowHalfDuplexConnection is OFF
+        let block = {
+            if flag {
+                self.config.removeElement(.AllowHalfDuplexConnection)
+            }else{
+                self.config.append(.AllowHalfDuplexConnection)
+            }
+        }
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            block()
+        }else{
+            dispatch_async(socketQueue, block)
+        }
     }
     /**
      * GCDAsyncSocket maintains thread safety by using an internal serial dispatch_queue.
@@ -5393,10 +5414,13 @@ class GCDAsyncSocket {
      * This is often NOT the case, as such queues are used solely for execution shaping.
      **/
     func markSocketQueueTargetQueue(socketNewTargetQueue:dispatch_queue_t) {
-        
+        var mutableSelf = self
+        withUnsafeMutablePointer(&mutableSelf){
+            dispatch_queue_set_specific(socketNewTargetQueue, GCDAsyncSocketQueueName, $0, nil)
+        }
     }
     func unmarkSocketQueueTargetQueue(socketOldTargetQueue:dispatch_queue_t) {
-        
+        dispatch_queue_set_specific(socketOldTargetQueue, GCDAsyncSocketQueueName, nil, nil)
     }
     /**
      * It's not thread-safe to access certain variables from outside the socket's internal queue.
@@ -5427,7 +5451,11 @@ class GCDAsyncSocket {
      * If you save references to any protected variables and use them outside the block, you do so at your own peril.
      **/
     func performBlock(block:dispatch_block_t) {
-        
+        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            block()
+        }else{
+            dispatch_async(socketQueue, block)
+        }
     }
     /**
      * These methods are only available from within the context of a performBlock: invocation.
@@ -5437,14 +5465,29 @@ class GCDAsyncSocket {
      * If the socket is a server socket (is accepting incoming connections),
      * it might actually have multiple internal socket file descriptors - one for IPv4 and one for IPv6.
      **/
-    func socketFD() -> Int {
-        return 0
+    func socketFD() -> Int32 {
+        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+            print("Warning: socketFD() is only available from within the context of a performBlock() call")
+            return SOCKET_NULL
+        }
+        if _socket4FD != SOCKET_NULL {
+            return _socket4FD
+        }
+        return _socket6FD
     }
-    func socket4FD() -> Int {
-        return 0
+    func socket4FD() -> Int32 {
+        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+            print("Warning: socket4FD() is only available from within the context of a performBlock() call")
+            return SOCKET_NULL
+        }
+        return _socket4FD
     }
-    func socket6FD() -> Int {
-        return 0
+    func socket6FD() -> Int32 {
+        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+            print("Warning: socket6FD() is only available from within the context of a performBlock() call")
+            return SOCKET_NULL
+        }
+        return _socket6FD
     }
     #if iOS
     /**
