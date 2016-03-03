@@ -52,7 +52,7 @@ class GCDAsyncSocketPreBuffer {
             
             let newPreBufferSize = preBufferSize + additionalBytes;
             let newPreBuffer = UnsafeMutablePointer<CInt>.alloc(newPreBufferSize);
-            newPreBuffer.initializeFrom(preBuffer, count: preBufferSize)
+            newPreBuffer.initializeFrom(preBuffer, count: preBufferSize)//TODO: this might be duplicated in the Socket class after we call ensureCapacityForWrite
             
             let readPointerOffset = readPointer - preBuffer;
             let writePointerOffset = writePointer - preBuffer;

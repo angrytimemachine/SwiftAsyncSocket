@@ -21,6 +21,27 @@ class SwiftAsyncSocketTests: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
         super.tearDown()
     }
+    
+    
+    func testWhere() {
+        let t = NSNumber.init(bool: true)
+        let f = NSNumber.init(bool: false)
+        let arr = CFArrayCreate(nil, nil, 0, nil)
+        let dict = ["true":t, "false":f, "array":arr]
+        
+        let b = dict["bool"]?.boolValue
+        
+//        if let value = dict["wrongKey"] where value == false {
+            if let t = dict["true"]?.boolValue where t == true {
+                if let f = dict["false"]?.boolValue where !f {
+                    return
+                }
+            }
+//        }
+        
+        XCTFail()
+    }
+    
     func testGuard() {
         let packet : GCDAsyncReadPacket? = nil
         guard let _ = packet where packet?.term?.length > 0 else {
@@ -87,6 +108,7 @@ class SwiftAsyncSocketTests: XCTestCase {
                 }
                 addr4 = NSMutableData.init(bytes:&nativeAddr4, length: sizeofValue(nativeAddr4))
                 cursor = cursor.memory.ifa_next;
+                print("addr4 \(addr4)")
             }
         }
     }

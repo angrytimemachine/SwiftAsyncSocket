@@ -6,16 +6,80 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
-            timestampString = "477821344.194882"
+            timestampString = "478415470.457497"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "98"
-            endingLineNumber = "98"
+            startingLineNumber = "119"
+            endingLineNumber = "119"
             landmarkName = "testPerformanceExample()"
+            landmarkType = "5">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAsyncSocketTests.SwiftAsyncSocketTests.testPerformanceExample () -&gt; ()"
+                  moduleName = "SwiftAsyncSocketTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/joelsaltzman/Sites/SwiftAsyncSocket/SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
+                  timestampString = "478310754.793697"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "107"
+                  endingLineNumber = "107"
+                  offsetFromSymbolStart = "119">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAsyncSocketTests.SwiftAsyncSocketTests.(testPerformanceExample () -&gt; ()).(closure #1)"
+                  moduleName = "SwiftAsyncSocketTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/joelsaltzman/Sites/SwiftAsyncSocket/SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
+                  timestampString = "478310754.793905"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "107"
+                  endingLineNumber = "107"
+                  offsetFromSymbolStart = "4">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
+            timestampString = "478415470.457497"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "111"
+            endingLineNumber = "111"
+            landmarkName = "testMemoryToStructConversion()"
+            landmarkType = "5">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SwiftAsyncSocket/GCDAsyncSocket.swift"
+            timestampString = "478319763.963538"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "4552"
+            endingLineNumber = "4552"
+            landmarkName = "sslReadWithBuffer(_:length:)"
             landmarkType = "5">
          </BreakpointContent>
       </BreakpointProxy>
@@ -26,12 +90,60 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
-            timestampString = "477821344.194882"
+            timestampString = "478415454.400617"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "90"
-            endingLineNumber = "90"
-            landmarkName = "testMemoryToStructConversion()"
+            startingLineNumber = "34"
+            endingLineNumber = "34"
+            landmarkName = "testWhere()"
+            landmarkType = "5">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAsyncSocketTests.SwiftAsyncSocketTests.testWhere () -&gt; ()"
+                  moduleName = "SwiftAsyncSocketTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/joelsaltzman/Sites/SwiftAsyncSocket/SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
+                  timestampString = "478415471.887637"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "34"
+                  endingLineNumber = "34"
+                  offsetFromSymbolStart = "535">
+               </Location>
+               <Location
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAsyncSocketTests.SwiftAsyncSocketTests.testWhere () -&gt; ()"
+                  moduleName = "SwiftAsyncSocketTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/joelsaltzman/Sites/SwiftAsyncSocket/SwiftAsyncSocketTests/SwiftAsyncSocketTests.swift"
+                  timestampString = "478415471.887801"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "34"
+                  endingLineNumber = "34"
+                  offsetFromSymbolStart = "736">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SwiftAsyncSocket/GCDAsyncSocket.swift"
+            timestampString = "478420759.54119"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "4868"
+            endingLineNumber = "4868"
+            landmarkName = "ssl_startTLS()"
             landmarkType = "5">
          </BreakpointContent>
       </BreakpointProxy>

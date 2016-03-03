@@ -14,13 +14,13 @@ import Foundation
  **/
 
 class GCDAsyncSpecialPacket {
-    var tlsSettings : [String:AnyObject]?
+    var tlsSettings : [String:AnyObject] = [:]
     
     init(){
         
     }
     
-    convenience init(withTLSSettings tls : [String:AnyObject]?){
+    convenience init(withTLSSettings tls : [String:AnyObject]){
         self.init()
         self.tlsSettings = tls
     }

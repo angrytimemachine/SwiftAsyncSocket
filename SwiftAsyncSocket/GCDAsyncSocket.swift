@@ -166,6 +166,9 @@ class GCDAsyncSocket {
     var streamContext : CFStreamClientContext? = nil
     var readStream : CFReadStreamRef? = nil
     var writeStream : CFWriteStreamRef? = nil
+    var _cfstreamThread:NSThread?// Used for CFStreams
+    var cfstreamThreadRetainCount:UInt64// setup & teardown
+    var cfstreamThreadSetupQueue:dispatch_queue_t// setup & teardown
     #endif
     var _sslContext : SSLContext? = nil
     var sslPreBuffer : GCDAsyncSocketPreBuffer? = nil
@@ -3633,6 +3636,7 @@ class GCDAsyncSocket {
                         return;
                     }
                     packetBuffer.appendBytes(thePreBuffer.readBuffer(), length: bytesRead)
+                    // Remove the copied bytes from the prebuffer
                     thePreBuffer.didRead(bytes: bytesRead)
                     
                     // Update totals
@@ -4483,48 +4487,718 @@ class GCDAsyncSocket {
      * 
      * You can also perform additional validation in socketDidSecure.
      **/
-    func startTLS(tlsSettings:NSDictionary?){
-        
+    
+    // Passing nil/NULL to CFReadStreamSetProperty will appear to work the same as passing an empty dictionary,
+    // but causes problems if we later try to fetch the remote host's certificate.
+    //
+    // To be exact, it causes the following to return NULL instead of the normal result:
+    // CFReadStreamCopyProperty(readStream, kCFStreamPropertySSLPeerCertificates)
+    //
+    // So we require at least an empty dictionary
+    func startTLS(tlsSettings:[String : AnyObject]){
+        let packet = GCDAsyncSpecialPacket.init(withTLSSettings: tlsSettings)
+        dispatch_async(socketQueue){
+            autoreleasepool{
+                guard self.flags.contains(.SocketStarted) && !self.flags.contains(.QueuedTLS) && !self.flags.contains(.ForbidReadsWrites) else {
+                    return
+                }
+                self.readQueue.append(packet as! GCDAsyncReadPacket)
+                self.writeQueue.append(packet as! GCDAsyncWritePacket)
+                self.flags.append(.QueuedTLS)
+                self.maybeDequeueRead()
+                self.maybeDequeueWrite()
+            }
+        }
     }
     func maybeStartTLS() {
+        // We can't start TLS until:
+        // - All queued reads prior to the user calling startTLS are complete
+        // - All queued writes prior to the user calling startTLS are complete
+        //
+        // We'll know these conditions are met when both kStartingReadTLS and kStartingWriteTLS are set
+        guard flags.contains(.StartingReadTLS) && flags.contains(.StartingWriteTLS) else {
+            return
+        }
+        var useSecureTransport = true
+        #if iOS
+            if let tlsPacket = currentRead as GCDAsyncSpecialPacket {
+                if let value = tlsPacket.tlsSettings[GCDAsyncSocketUseCFStreamForTLS] where value == true {
+                    useSecureTransport = true
+                }
+            }
+        #endif
         
+        if useSecureTransport {
+            ssl_startTLS()
+        }else{
+            #if iOS
+                cf_startTLS()
+            #endif
+        }
     }
     
      /***********************************************************/
      // MARK: Security via SecureTransport
      /***********************************************************/
-    func sslReadWithBuffer(buffer:UnsafeMutablePointer<CInt>, inout length bufferLength:size_t) -> OSStatus {
-        return 0
-    }
-    func sslWriteWithBuffer(buffer:UnsafeMutablePointer<CInt>, inout length bufferLength:size_t) -> OSStatus {
-        return 0
-    }
-    //static OSStatus SSLReadFunction(SSLConnectionRef connection, void *data, size_t *dataLength)
-    //static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, size_t *dataLength)
-    func ssl_startTLS() {
+    func sslReadWithBuffer(buffer:UnsafeMutablePointer<CInt>, length bufferLength:UnsafeMutablePointer<Int>) -> OSStatus {
+        print("Verbose: sslReadWithBuffer:\(buffer) length:\(bufferLength)")
+        guard let theSSLPreBuffer = sslPreBuffer where (socketFDBytesAvailable == 0 && sslPreBuffer?.availableBytes() == 0) else {
+            print("Verbose: No data available to read in sslReadWithBuffer()")
+            
+            // No data available to read.
+            //
+            // Need to wait for readSource to fire and notify us of
+            // available data in the socket's internal read buffer.
+            resumeReadSource()
+            bufferLength.memory = 0
+            return errSSLWouldBlock
+        }
         
+        var totalBytesRead = 0
+        var totalBytesLeftToBeRead = bufferLength.memory
+        var done = false
+        var socketError = false
+        
+        //
+        // STEP 1 : READ FROM SSL PRE BUFFER
+        //
+        
+        let sslPreBufferLength = theSSLPreBuffer.availableBytes()
+        if sslPreBufferLength > 0 {
+            print("Verbose: sslReadWithBuffer() Reading from SSL pre buffer")
+            var bytesToCopy = 0
+            if sslPreBufferLength > totalBytesLeftToBeRead{
+                bytesToCopy = totalBytesLeftToBeRead
+            }else{
+                bytesToCopy = sslPreBufferLength
+            }
+            print("Verbose: sslReadWithBuffer() Copying \(bytesToCopy) bytes from sslPreBuffer")
+            
+            buffer.initializeFrom(theSSLPreBuffer.readBuffer(), count: bytesToCopy)
+            theSSLPreBuffer.didRead(bytes: bytesToCopy)
+            
+            print("Verbose: sslReadWithBuffer() sslPreBuffer.length = \(theSSLPreBuffer.availableBytes)")
+            totalBytesRead += bytesToCopy
+            totalBytesLeftToBeRead -= bytesToCopy
+            
+            done = totalBytesLeftToBeRead == 0
+            if done {
+                print("Verbose: sslReadWithBuffer() done")
+            }
+        }
+        
+        //
+        // STEP 2 : READ FROM SOCKET
+        //
+        if !done && socketFDBytesAvailable > 0 {
+            print("Verbose: sslReadWithBuffer() reading from socket")
+            
+            let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
+            var readIntoPreBuffer = false
+            var bytesToRead = 0
+            var buf : UnsafeMutablePointer<CInt>? = nil
+            
+            if socketFDBytesAvailable > UInt(totalBytesLeftToBeRead) {
+                // Read all available data from socket into sslPreBuffer.
+                // Then copy requested amount into dataBuffer.
+                print("Verbose: sslReadWithBuffer() reading into sslPreBuffer")
+                theSSLPreBuffer.ensureCapacityForWrite(Int(socketFDBytesAvailable))
+                readIntoPreBuffer = true
+                bytesToRead = size_t(socketFDBytesAvailable)
+                buf = theSSLPreBuffer.writeBuffer()
+            }else{
+                // Read available data from socket directly into dataBuffer.
+                print("Verbose: sslReadWithBuffer() reading directly into dataBuffer")
+                readIntoPreBuffer = false
+                bytesToRead = totalBytesLeftToBeRead
+                buf = buffer
+                buf?.advancedBy(totalBytesRead)
+            }
+            
+            let result = read(socketFD, buf!, bytesToRead)
+            print("Verbose: sslReadWithBuffer() read from socket = \(result)")
+            if result < 0 {
+                print("Verbose: sslReadWithBuffer() read errno = \(errno)")
+                if errno != EWOULDBLOCK {
+                    socketError = true
+                }
+                socketFDBytesAvailable = 0
+            }else if result == 0 {
+                print("Verbose: sslReadWithBuffer() read EOF")
+                socketError = true
+                socketFDBytesAvailable = 0
+            }else{
+                let bytesReadFromSocket = result
+                if socketFDBytesAvailable > UInt(bytesReadFromSocket) {
+                    socketFDBytesAvailable -= UInt(bytesReadFromSocket)
+                }else{
+                    socketFDBytesAvailable = 0
+                }
+                if readIntoPreBuffer {
+                    theSSLPreBuffer.didWrite(bytes: bytesReadFromSocket)
+                    let bytesToCopy = totalBytesLeftToBeRead < bytesReadFromSocket ? totalBytesLeftToBeRead : bytesReadFromSocket
+                    print("Verbose: sslReadWithBuffer() Copying \(bytesToCopy) out of sslPreBufer")
+                    buffer.advancedBy(totalBytesRead)
+                    buffer.initializeFrom(theSSLPreBuffer.readBuffer(), count: bytesToCopy)
+                    theSSLPreBuffer.didRead(bytes: bytesToCopy)
+                    
+                    totalBytesRead += bytesToCopy
+                    totalBytesLeftToBeRead -= bytesToCopy
+                    
+                    print("Verbose: sslReadWithBuffer() sslPreBuffer.length = \(theSSLPreBuffer.availableBytes())")
+                    
+                }else{
+                    totalBytesRead += bytesReadFromSocket
+                    totalBytesLeftToBeRead -= bytesReadFromSocket
+                }
+                done = totalBytesLeftToBeRead == 0
+                if done {
+                    print("Verbose: sslReadWithBuffer() done")
+                }
+            }
+        }
+        
+        bufferLength.memory = totalBytesRead
+        if done {
+            return noErr
+        }
+        if socketError {
+            return errSSLClosedAbort
+        }
+        
+        return errSSLWouldBlock
+    }
+    func sslWriteWithBuffer(buffer:UnsafeMutablePointer<CInt>, length bufferLength:UnsafeMutablePointer<Int>) -> OSStatus {
+        guard flags.contains(.SocketCanAcceptBytes) else{
+            // Unable to write.
+            //
+            // Need to wait for writeSource to fire and notify us of
+            // available space in the socket's internal write buffer.
+            resumeWriteSource()
+            bufferLength.memory = 0
+            return errSSLWouldBlock
+        }
+        
+        let bytesToWrite = bufferLength
+        var bytesWritten = 0
+        var done = false
+        var socketError = false
+        
+        let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
+        let result = write(socketFD, buffer, bytesToWrite.memory)
+        if result < 0 {
+            if errno != EWOULDBLOCK {
+                socketError = true
+            }
+            flags.removeElement(.SocketCanAcceptBytes)
+        }else if result == 0 {
+            flags.removeElement(.SocketCanAcceptBytes)
+        }else{
+            bytesWritten = result
+            if bytesWritten == bytesToWrite.memory {
+                done = true
+            }
+        }
+        
+        bufferLength.memory = bytesWritten
+        if done {
+            return noErr
+        }
+        if socketError {
+            return errSSLClosedAbort
+        }
+        
+        return errSSLWouldBlock
+    }
+    /*
+    func SSLReadFunction(connection:SSLConnectionRef, data:UnsafeMutablePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus {
+        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+            print("What the deuce?")
+            return 0
+        }
+        let asyncSocket = GCDAsyncSocket(connection.memory)
+        return asyncSocket.sslReadWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
+    }
+    
+    func SSLWriteFunction(connection:SSLConnectionRef, data:UnsafePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus {
+        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+            print("What the deuce?")
+            return 0
+        }
+        let asyncSocket = GCDAsyncSocket(connection.memory)
+        return asyncSocket.sslWriteWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
+    }*/
+    func ssl_startTLS() {
+        print("Verbose: ssl_startTLS() Starting TLS (via SecureTransport)")
+        var status:OSStatus = 0
+        guard let tlsPacket:GCDAsyncSpecialPacket = currentRead else {
+            print("logic error")
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid logic. Tried to ssl_startTLS() and currentRead was nil"))
+            return
+        }
+        let tlsSettings = tlsPacket.tlsSettings
+        let isServer = tlsSettings[kCFStreamSSLIsServer as String] != nil ? tlsSettings[kCFStreamSSLIsServer as String]!.boolValue! : false
+        
+        // Create SSLContext, and setup IO callbacks and connection ref
+//        if #available(iOS 9, *){//, OSX 10.8
+            if isServer {
+                _sslContext = SSLCreateContext(kCFAllocatorDefault, .ServerSide, .StreamType)
+            }else{
+                _sslContext = SSLCreateContext(kCFAllocatorDefault, .ClientSide, .StreamType)
+            }
+            guard let theSSLContext = _sslContext else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLCreateContext()"))
+                return
+            }
+//        } else{//current deployment target prevents us from needing this section
+//            status = SSLNewContext(isServer, &sslContext);
+//            if (status != noErr)
+//            {
+//                [self closeWithError:[self otherError:@"Error in SSLNewContext"]];
+//                return;
+//            }
+//        }
+        
+
+        status = SSLSetIOFuncs(theSSLContext,
+                               //SSLReadFunction
+                               {(connection:SSLConnectionRef, data:UnsafeMutablePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus in
+                                    guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+                                        print("What the deuce?")
+                                        return 0
+                                    }
+                                    let asyncSocket = GCDAsyncSocket(connection.memory)
+                                    return asyncSocket.sslReadWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
+                                },
+                               //SSLWriteFunction
+                                {(connection:SSLConnectionRef, data:UnsafePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus in
+                                    guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+                                        print("What the deuce?")
+                                        return 0
+                                    }
+                                    let asyncSocket = GCDAsyncSocket(connection.memory)
+                                    return asyncSocket.sslWriteWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
+                                })
+        guard status == noErr else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetIOFunc \(status)"))
+            return
+        }
+        var mutableSelf = self
+        withUnsafePointer(&mutableSelf){
+            status = SSLSetConnection(theSSLContext, $0)
+        }
+        
+        guard status == noErr else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetConnection \(status)"))
+            return
+        }
+        
+        if let shouldManuallyEvaluateTrust = tlsSettings[GCDAsyncSocketManuallyEvaluateTrust]?.boolValue where shouldManuallyEvaluateTrust == true {
+            if isServer {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Manual trust validation is not supported for server sockets"))
+                return
+            }
+            status = SSLSetSessionOption(theSSLContext, .BreakOnServerAuth, true)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption \(status)"))
+                return
+            }
+            //build version is higher than this
+//            if #available(iOS 9, OSX 10.8, *){
+//            }else{
+//                // Note from Apple's documentation:
+//                //
+//                // It is only necessary to call SSLSetEnableCertVerify on the Mac prior to OS X 10.8.
+//                // On OS X 10.8 and later setting kSSLSessionOptionBreakOnServerAuth always disables the
+//                // built-in trust evaluation. All versions of iOS behave like OS X 10.8 and thus
+//                // SSLSetEnableCertVerify is not available on that platform at all.
+//                
+//                status = SSLSetEnableCertVerify(theSSLContext, false)
+//                guard status == noErr else {
+//                {
+//                    closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetEnableCertVerify (status)"))
+//                    return;
+//                }
+//
+//            }
+        }
+        // Configure SSLContext from given settings
+        //
+        // Checklist:
+        //  1. kCFStreamSSLPeerName
+        //  2. kCFStreamSSLCertificates
+        //  3. GCDAsyncSocketSSLPeerID
+        //  4. GCDAsyncSocketSSLProtocolVersionMin
+        //  5. GCDAsyncSocketSSLProtocolVersionMax
+        //  6. GCDAsyncSocketSSLSessionOptionFalseStart
+        //  7. GCDAsyncSocketSSLSessionOptionSendOneByteRecord
+        //  8. GCDAsyncSocketSSLCipherSuites
+        //  9. GCDAsyncSocketSSLDiffieHellmanParameters (Mac)
+        //
+        // Deprecated (throw error):
+        // 10. kCFStreamSSLAllowsAnyRoot
+        // 11. kCFStreamSSLAllowsExpiredRoots
+        // 12. kCFStreamSSLAllowsExpiredCertificates
+        // 13. kCFStreamSSLValidatesCertificateChain
+        // 14. kCFStreamSSLLevel
+        
+        // 1. kCFStreamSSLPeerName
+        if tlsSettings[kCFStreamSSLPeerName as String] != nil {
+            guard let peerName = tlsSettings[kCFStreamSSLPeerName as String] where peerName is String else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for kCFStreamSSLPeerName. Value must be of type String for kCFStreamSSLPeerName."))
+                return
+            }
+            let peer = peerName.cStringUsingEncoding(NSUTF8StringEncoding)
+            let peerNameLength = peerName.characters.count
+            status = SSLSetPeerDomainName(theSSLContext, peer, peerNameLength)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption \(status)"))
+                return
+            }
+        }
+        
+        //TODO: convert from Array to CFArray?
+        // 2. kCFStreamSSLCertificates
+        if tlsSettings[kCFStreamSSLCertificates as String] != nil {
+            guard let certs = tlsSettings[kCFStreamSSLCertificates as String] where certs is CFArray else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for kCFStreamSSLCertificates. Value must be of type CFArray for kCFStreamSSLCertificates."))
+                return
+            }
+            status = SSLSetCertificate(theSSLContext, certs as! CFArray)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetCertificate \(status)"))
+                return
+            }
+        }
+        
+        // 3. GCDAsyncSocketSSLPeerID
+        if tlsSettings[GCDAsyncSocketSSLPeerID] != nil {
+            guard let peerIdData = tlsSettings[GCDAsyncSocketSSLPeerID] as? NSData else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLPeerID. Value must be of type NSData for GCDAsyncSocketSSLPeerID. You can convert strings data if you need to"))
+                return
+            }
+            status = SSLSetPeerID(theSSLContext, peerIdData.bytes, peerIdData.length)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetPeerID \(status)"))
+                return
+            }
+        }
+        
+        // 4. GCDAsyncSocketSSLProtocolVersionMin
+        if tlsSettings[GCDAsyncSocketSSLProtocolVersionMin] != nil {
+            guard let minProtocolNumber = tlsSettings[GCDAsyncSocketSSLProtocolVersionMin] as? NSNumber else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLProtocolVersionMin. Value must be of type NSNumber for GCDAsyncSocketSSLProtocolVersionMin."))
+                return
+            }
+            if let minProtocol = SSLProtocol(rawValue:minProtocolNumber.intValue) where minProtocol != SSLProtocol.SSLProtocolUnknown {
+                status = SSLSetProtocolVersionMin(theSSLContext, minProtocol)
+                guard status == noErr else {
+                    closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetProtocolVersionMin \(status)"))
+                    return
+                }
+            }
+        }
+        
+        // 5. GCDAsyncSocketSSLProtocolVersionMax
+        if tlsSettings[GCDAsyncSocketSSLProtocolVersionMax] != nil {
+            guard let maxProtocolNumber = tlsSettings[GCDAsyncSocketSSLProtocolVersionMax] as? NSNumber else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLProtocolVersionMax. Value must be of type NSNumber for GCDAsyncSocketSSLProtocolVersionMax."))
+                return
+            }
+            if let maxProtocol = SSLProtocol(rawValue:maxProtocolNumber.intValue) where maxProtocol != SSLProtocol.SSLProtocolUnknown {
+                status = SSLSetProtocolVersionMin(theSSLContext, maxProtocol)
+                guard status == noErr else {
+                    closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetProtocolVersionMax \(status)"))
+                    return
+                }
+            }
+        }
+        
+        // 6. GCDAsyncSocketSSLSessionOptionFalseStart
+        if tlsSettings[GCDAsyncSocketSSLSessionOptionFalseStart] != nil {
+            guard let falseStart = tlsSettings[GCDAsyncSocketSSLSessionOptionFalseStart] as? NSNumber else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLSessionOptionFalseStart. Value must be of type NSNumber for GCDAsyncSocketSSLSessionOptionFalseStart."))
+                return
+            }
+            status = SSLSetSessionOption(theSSLContext, .FalseStart, falseStart.boolValue)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption:FalseStart \(status)"))
+                return
+            }
+        }
+        
+        // 7. GCDAsyncSocketSSLSessionOptionSendOneByteRecord
+        if tlsSettings[GCDAsyncSocketSSLSessionOptionSendOneByteRecord] != nil {
+            guard let sendOneByteRecord = tlsSettings[GCDAsyncSocketSSLSessionOptionSendOneByteRecord] as? NSNumber else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLSessionOptionFalseStart. Value must be of type NSNumber for GCDAsyncSocketSSLSessionOptionFalseStart."))
+                return
+            }
+            status = SSLSetSessionOption(theSSLContext, .SendOneByteRecord, sendOneByteRecord.boolValue)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption:SendOneByteRecord \(status)"))
+                return
+            }
+        }
+        
+        // 8. GCDAsyncSocketSSLCipherSuites
+        if tlsSettings[GCDAsyncSocketSSLCipherSuites] != nil {
+            guard let cipherSuites = tlsSettings[GCDAsyncSocketSSLCipherSuites] as? Array<NSNumber> else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLCipherSuites. Value must be of type Array<NSNumber> for GCDAsyncSocketSSLCipherSuites."))
+                return
+            }
+            
+            let numberOfCiphers = cipherSuites.count
+            var ciphers:[SSLCipherSuite] = []
+            for cipherIndex in 0..<numberOfCiphers {
+                let cipherObject = cipherSuites[cipherIndex]
+                ciphers.append(cipherObject.unsignedIntValue)
+            }
+            
+            status = SSLSetEnabledCiphers(theSSLContext, ciphers, numberOfCiphers);
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetEnabledCiphers \(status)"))
+                return
+            }
+        }
+        
+        // 9. GCDAsyncSocketSSLDiffieHellmanParameters
+        #if !iOS
+        if tlsSettings[GCDAsyncSocketSSLDiffieHellmanParameters] != nil {
+            guard let diffieHellmanData = tlsSettings[GCDAsyncSocketSSLCipherSuites] as? NSData else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLDiffieHellmanParameters. Value must be of type NSData for GCDAsyncSocketSSLDiffieHellmanParameters."))
+                return
+            }
+        
+            status = SSLSetDiffieHellmanParams(theSSLContext, diffieHellmanData.bytes, diffieHellmanData.length)
+            guard status == noErr else {
+                closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetDiffieHellmanParams \(status)"))
+                return
+            }
+        }
+        #endif
+        // DEPRECATED checks
+        // 10. kCFStreamSSLAllowsAnyRoot
+        // 11. kCFStreamSSLAllowsExpiredRoots
+        // 12. kCFStreamSSLValidatesCertificateChain
+        // 13. kCFStreamSSLAllowsExpiredCertificates
+        // 14. kCFStreamSSLLevel
+        
+        // Setup the sslPreBuffer
+        //
+        // Any data in the preBuffer needs to be moved into the sslPreBuffer,
+        // as this data is now part of the secure read stream.
+        
+        sslPreBuffer = GCDAsyncSocketPreBuffer.init(withCapacity: 1024*4)
+        if let preBufferLength = preBuffer?.availableBytes() where preBufferLength > 0{
+            if let theSSLPreBuffer = sslPreBuffer {
+                theSSLPreBuffer.ensureCapacityForWrite(preBufferLength)
+                theSSLPreBuffer.writeBuffer().initializeFrom(preBuffer!.readBuffer(), count: preBufferLength)
+                theSSLPreBuffer.didWrite(bytes: preBufferLength)
+            }
+        }
+        lastSSLHandshakeError = noErr
+        sslErrCode = noErr
+        // Start the SSL Handshake process
+        ssl_continueSSLHandshake()
     }
     func ssl_continueSSLHandshake() {
+        // If the return value is noErr, the session is ready for normal secure communication.
+        // If the return value is errSSLWouldBlock, the SSLHandshake function must be called again.
+        // If the return value is errSSLServerAuthCompleted, we ask delegate if we should trust the
+        // server and then call SSLHandshake again to resume the handshake or close the connection
+        // errSSLPeerBadCert SSL error.
+        // Otherwise, the return value indicates an error code.
         
+        guard let theSSLContext = sslContext() else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "sslContext() was nil in ssl_continueSSLHandshake()"))
+            return
+        }
+        var status = SSLHandshake(theSSLContext)
+        lastSSLHandshakeError = status
+        if status == noErr {
+            print("Verbose: SSLHandshake complete")
+            flags.removeElement(.StartingReadTLS)
+            flags.removeElement(.StartingWriteTLS)
+            flags.append(.SocketSecure)
+            if let theDelegate = _delegate, let theDelegateQueue = _delegateQueue {
+                dispatch_async(theDelegateQueue){
+                    autoreleasepool {
+                        theDelegate.socketDidSecure(self)
+                    }
+                }
+            }
+            endCurrentRead()
+            endCurrentWrite()
+            maybeDequeueRead()
+            maybeDequeueWrite()
+        }else if status == errSSLPeerAuthCompleted {
+            print("Verbose: SSLHandshake peerAuthCompleted - awaiting delegate approval")
+            var trust:SecTrust? = nil
+            status = SSLCopyPeerTrust(theSSLContext, &trust)
+            if status != noErr {
+                closeSocket(withError: GCDAsyncSocketError.SSLError(code: status))
+                return
+            }
+            let aStateIndex = stateIndex
+            let theSocketQueue = socketQueue
+            let completionHandler =  {
+                [weak self] (shouldTrust:Bool) -> Void in
+                dispatch_async(theSocketQueue) {
+                    autoreleasepool {
+                        if trust != nil {
+                            trust = nil
+                        }
+                        if let strongSelf = self {
+                            strongSelf.ssl_shouldTrustPeer(shouldTrust, aStateIndex: aStateIndex)
+                        }
+                    }
+                }
+            }
+            
+            if let theDelegate = _delegate, let theDelegateQueue = _delegateQueue {
+                dispatch_async(theDelegateQueue){
+                    autoreleasepool {
+                        theDelegate.socket(self, didReceiveTrust: trust!, completionHandler: completionHandler)
+                    }
+                }
+            }
+        }else if status == errSSLWouldBlock {
+            print("Verbose: SSLHandshake continues...")
+            // Handshake continues...
+            //
+            // This method will be called again from doReadData or doWriteData.
+        }else{
+            closeSocket(withError: GCDAsyncSocketError.SSLError(code: status))
+        }
     }
     func ssl_shouldTrustPeer(shouldTrust:Bool, aStateIndex:Int) {
-        
+        guard aStateIndex == stateIndex else {
+            print("Info: Ignoring ssl_shouldTrustPeer - invalid state (maybe disconnected)")
+            // One of the following is true
+            // - the socket was disconnected
+            // - the startTLS operation timed out
+            // - the completionHandler was already invoked once
+            return
+        }
+        // Increment stateIndex to ensure completionHandler can only be called once.
+        stateIndex += 1
+        if shouldTrust {
+            guard lastSSLHandshakeError == errSSLPeerAuthCompleted else{
+                print("ssl_shouldTrustPeer called when last error is \(lastSSLHandshakeError) and not errSSLPeerAuthCompleted")
+                closeSocket(withError: GCDAsyncSocketError.SSLError(code: lastSSLHandshakeError))
+                return
+            }
+            closeSocket(withError: GCDAsyncSocketError.SSLError(code: errSSLPeerBadCert))
+        }
     }
      /***********************************************************/
      // MARK: Security via CFStream
      /***********************************************************/
     #if iOS
     func cf_finishSSLHandshake() {
-    
+        guard !flags.contains(.StartingReadTLS) || !flags.contains(.StartingWriteTLS) else {
+            return
+        }
+        flags.removeElement(.StartingReadTLS)
+        flags.removeElement(.StartingWriteTLS)
+        flags.append(.SocketSecure)
+        if let theDelegate = _delegate, let theDelegateQueue = _delegateQueue {
+            dispatch_async(theDelegateQueue){
+                autoreleasepool {
+                    theDelegate.socketDidSecure(self)
+                }
+            }
+        }
+        endCurrentRead()
+        endCurrentWrite()
+        maybeDequeueRead()
+        maybeDequeueWrite()
+        
     }
-    func cf_abortSSLHandshake() throws {
-    
+    func cf_abortSSLHandshake(error:ErrorType?) throws {
+        guard !flags.contains(.StartingReadTLS) || !flags.contains(.StartingWriteTLS) else {
+            return
+        }
+        flags.removeElement(.StartingReadTLS)
+        flags.removeElement(.StartingWriteTLS)
+        closeSocket(withError: error)
     }
     func cf_startTLS() {
-    
+        print("Verbose: Starting TLS (via CFStream)...")
+        guard let thePreBuffer = preBuffer where thePreBuffer.availableBytes() > 0 else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid TLS transition. Handshake has already been read from socket."))
+            return
+        }
+        suspendReadSource()
+        suspendWriteSource()
+        socketFDBytesAvailable = 0
+        flags.removeElement(.SocketCanAcceptBytes)
+        flags.removeElement(.SecureSocketHasBytesAvailable)
+        flags.append(.UsingCFStreamForTLS)
+        guard createReadAndWriteStream() else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in createReadAndWriteStream"))
+            return
+        }
+        guard registerForStreamCallbacks(includeReadingAndWriting:true) else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in registerForStreamCallbacks"))
+            return
+        }
+        guard addStreamsToRunLoop(includeReadWrite:true) else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in addStreamsToRunLoop"))
+            return
+        }
+        guard let tlsPacket = currentRead where tlsPacket.dynamicType == GCDAsyncSpecialPacket.self else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid read packet for startTLS"))
+            return
+        }
+        guard let theCurrentWrite = currentWrite where theCurrentWrite.dynamicType == GCDAsyncSpecialPacket.self else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid write packet for startTLS"))
+            return
+        }
+        guard let theReadStream = readStream else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid readStream for startTLS"))
+            return
+        }
+        guard let theWriteStream = writeStream else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid writeStream for startTLS"))
+            return
+        }
+        let tlsSettings =  tlsPacket.tlsSettings
+        
+        // Getting an error concerning kCFStreamPropertySSLSettings ?
+        // You need to add the CFNetwork framework to your iOS application.
+        let r1 = CFReadStreamSetProperty(theReadStream, kCFStreamPropertySSLSettings, tlsSettings)
+        let r2 = CFWriteStreamSetProperty(theWriteStream, kCFStreamPropertySSLSettings, tlsSettings)
+        // For some reason, starting around the time of iOS 4.3,
+        // the first call to set the kCFStreamPropertySSLSettings will return true,
+        // but the second will return false.
+        //
+        // Order doesn't seem to matter.
+        // So you could call CFReadStreamSetProperty and then CFWriteStreamSetProperty, or you could reverse the order.
+        // Either way, the first call will return true, and the second returns false.
+        //
+        // Interestingly, this doesn't seem to affect anything.
+        // Which is not altogether unusual, as the documentation seems to suggest that (for many settings)
+        // setting it on one side of the stream automatically sets it for the other side of the stream.
+        //
+        // Although there isn't anything in the documentation to suggest that the second attempt would fail.
+        //
+        // Furthermore, this only seems to affect streams that are negotiating a security upgrade.
+        // In other words, the socket gets connected, there is some back-and-forth communication over the unsecure
+        // connection, and then a startTLS is issued.
+        // So this mostly affects newer protocols (XMPP, IMAP) as opposed to older protocols (HTTPS).
+        guard r1 || r2 else {// Yes, the && is correct - workaround for apple bug.
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamSetProperty"))
+            return
+        }
+        guard openStreams() else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in CFStreamOpen"))
+            return
+        }
+        print("Verbose: Waiting for SSL Handshake to complete...")
     }
     #endif
-    
+
      /***********************************************************/
      // MARK: CFStream
      /***********************************************************/
@@ -4533,13 +5207,51 @@ class GCDAsyncSocket {
     
     }
     func startCFStreamThreadIfNeeded() {
-    
+        var predicate:dispatch_once_t = 0
+        dispatch_once(&predicate) {
+            self.cfstreamThreadRetainCount = 0
+            self.cfstreamThreadSetupQueue = dispatch_queue_create("GCDAsyncSocket-CFStreamThreadSetup", DISPATCH_QUEUE_SERIAL)
+        }
+        dispatch_sync(cfstreamThreadSetupQueue){
+            autoreleasepool {
+                self.cfstreamThreadRetainCount += 1
+                if self.cfstreamThreadRetainCount == 1 {
+                    self._cfstreamThread = NSThread.init(target: self, selector:#selector(self.dynamicType.cfstreamThread), object: nil)
+                    self._cfstreamThread?.start()
+                }
+            }
+        }
     }
     func stopCFStreamThreadIfNeeded() {
-    
+        // The creation of the cfstreamThread is relatively expensive.
+        // So we'd like to keep it available for recycling.
+        // However, there's a tradeoff here, because it shouldn't remain alive forever.
+        // So what we're going to do is use a little delay before taking it down.
+        // This way it can be reused properly in situations where multiple sockets are continually in flux.
+        let delayInseconds = 30
+        let when = dispatch_time(DISPATCH_TIME_NOW, Int64(delayInseconds)*Int64(NSEC_PER_SEC))
+        dispatch_after(when, cfstreamThreadSetupQueue){
+            autoreleasepool{
+                guard self.cfstreamThreadRetainCount > 0 else {
+                    print("Logic error concerning cfstreamThread start / stop")
+                    return
+                }
+                self.cfstreamThreadRetainCount -= 1
+                if self.cfstreamThreadRetainCount == 0 {
+                    self._cfstreamThread?.cancel()// set isCancelled flag
+                    // wake up the thread
+                    //TODO: convert all thread code to dispatch_queue
+//                    [GCDAsyncSocket performSelector:@selector(ignore:)
+//                    onThread:cfstreamThread
+//                    withObject:[NSNull null]
+//                    waitUntilDone:NO];
+                    self._cfstreamThread = nil
+                }
+            }
+        }
     }
-    func cfstreamThread() {
-    
+    @objc func cfstreamThread() {
+        
     }
     func scheduleCFStreams(asyncSocket:GCDAsyncSocket){
     
@@ -4734,7 +5446,7 @@ class GCDAsyncSocket {
     func socket6FD() -> Int {
         return 0
     }
-    #if TARGET_OS_IPHONE
+    #if iOS
     /**
     * These methods are only available from within the context of a performBlock: invocation.
     * See the documentation for the performBlock: method above.
