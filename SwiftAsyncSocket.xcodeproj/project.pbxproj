@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		3829CD791C82D0BA0058732C /* Array_Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3829CD781C82D0BA0058732C /* Array_Extension.swift */; };
+		3829CD901C8A58750058732C /* ConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3829CD8F1C8A58750058732C /* ConnectionTests.swift */; };
 		382AD4991C670EE400698988 /* SwiftAsyncSocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 382AD4981C670EE400698988 /* SwiftAsyncSocket.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		382AD4A01C670EE400698988 /* SwiftAsyncSocket.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 382AD4951C670EE400698988 /* SwiftAsyncSocket.framework */; };
 		382AD4A51C670EE400698988 /* SwiftAsyncSocketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382AD4A41C670EE400698988 /* SwiftAsyncSocketTests.swift */; };
@@ -44,6 +45,7 @@
 
 /* Begin PBXFileReference section */
 		3829CD781C82D0BA0058732C /* Array_Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Array_Extension.swift; sourceTree = "<group>"; };
+		3829CD8F1C8A58750058732C /* ConnectionTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConnectionTests.swift; sourceTree = "<group>"; };
 		382AD4951C670EE400698988 /* SwiftAsyncSocket.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SwiftAsyncSocket.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		382AD4981C670EE400698988 /* SwiftAsyncSocket.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SwiftAsyncSocket.h; sourceTree = "<group>"; };
 		382AD49A1C670EE400698988 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				382AD4A41C670EE400698988 /* SwiftAsyncSocketTests.swift */,
+				3829CD8F1C8A58750058732C /* ConnectionTests.swift */,
 				382AD4A61C670EE400698988 /* Info.plist */,
 			);
 			path = SwiftAsyncSocketTests;
@@ -251,6 +254,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				382AD4A51C670EE400698988 /* SwiftAsyncSocketTests.swift in Sources */,
+				3829CD901C8A58750058732C /* ConnectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

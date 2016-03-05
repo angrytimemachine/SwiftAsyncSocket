@@ -29,14 +29,14 @@ class SwiftAsyncSocketTests: XCTestCase {
         let arr = CFArrayCreate(nil, nil, 0, nil)
         let dict = ["true":t, "false":f, "array":arr]
         
-        let b = dict["bool"]?.boolValue
+//        let b = dict["bool"]?.boolValue
         
 //        if let value = dict["wrongKey"] where value == false {
-            if let t = dict["true"]?.boolValue where t == true {
-                if let f = dict["false"]?.boolValue where !f {
-                    return
-                }
-            }
+//            if let t = dict["true"]?.boolValue where t == true {
+//                if let f = dict["false"]?.boolValue where !f {
+//                    return
+//                }
+//            }
 //        }
         
         XCTFail()

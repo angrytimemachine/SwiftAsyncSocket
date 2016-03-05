@@ -93,6 +93,7 @@ enum GCDAsyncSocketError: ErrorType {
     case BadParamError(message:String)
     case OtherError(message:String)
     case SSLError(code:OSStatus)
+    case GaiError(code:Int32)
     
     
     var description : String {
@@ -107,6 +108,7 @@ enum GCDAsyncSocketError: ErrorType {
             case let .BadParamError(message): return message
             case let .OtherError(message): return message
             case let .SSLError(code): return "Error code \(code) definition can be found in Apple's SecureTransport.h"
+            case let .GaiError(code): return String.init(CString: gai_strerror(code), encoding: NSUTF8StringEncoding)!
             }
         }
     }
@@ -792,7 +794,7 @@ class GCDAsyncSocket {
         
         if parentSocketFD == _socket4FD {
             socketType = 0
-            var addr4 = sockaddr()
+            var addr4 = sockaddr()//sockaddr not sockaddr_in because accept() uses sockaddr
             var addr4Len = socklen_t(sizeofValue(addr4))
             
             childSocketFD = withUnsafeMutablePointer(&addr4){
@@ -5577,46 +5579,184 @@ class GCDAsyncSocket {
      *   You can filter the addresses, if needed, using the other utility methods provided by the class.
      **/
     class func lookupHost(host:String, port:UInt16) throws -> [NSData] {
-        return [NSData]()
+        var addresses:[NSData] = []
+        if host == "localhost" || host == "loopback" {
+            // Use LOOPBACK address
+            var nativeAddr4 = sockaddr_in()
+            nativeAddr4.sin_len         = UInt8(sizeofValue(nativeAddr4))
+            nativeAddr4.sin_family      = sa_family_t(AF_INET)
+            nativeAddr4.sin_port        = port.bigEndian
+            nativeAddr4.sin_addr.s_addr = in_addr_t(INADDR_LOOPBACK.bigEndian)
+            
+            var nativeAddr6 = sockaddr_in6()
+            nativeAddr6.sin6_len       = UInt8(sizeofValue(nativeAddr6))
+            nativeAddr6.sin6_family    = sa_family_t(AF_INET6)
+            nativeAddr6.sin6_port      = port.bigEndian
+            nativeAddr6.sin6_flowinfo  = 0
+            nativeAddr6.sin6_addr      = in6addr_loopback
+            nativeAddr6.sin6_scope_id  = 0
+            
+            // Wrap the native address structures
+            let address4 = NSData.init(bytes: &nativeAddr4, length: sizeofValue(nativeAddr4))
+            let address6 = NSData.init(bytes: &nativeAddr6, length: sizeofValue(nativeAddr6))
+            addresses.append(address4)
+            addresses.append(address6)
+        }else{
+            let portStr = "\(port)"
+            var hints = addrinfo()
+            hints.ai_family = PF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            hints.ai_protocol = IPPROTO_TCP
+            
+            var res0 = UnsafeMutablePointer<addrinfo>.init()
+            guard let hostCString = host.cStringUsingEncoding(NSUTF8StringEncoding) else{
+                print("Warning: host failed to convert to c string")
+                return addresses
+            }
+            guard let portCString = portStr.cStringUsingEncoding(NSUTF8StringEncoding) else{
+                print("Warning: port failed to convert to c string")
+                return addresses
+            }
+            let gaiError = getaddrinfo(hostCString, portCString, &hints, &res0)
+            guard gaiError == 0 else {
+                throw GCDAsyncSocketError.GaiError(code: gaiError)
+            }
+            var capacity = 0
+            var res = res0
+            while res != nil {
+                if res.memory.ai_family == AF_INET || res.memory.ai_family == AF_INET6 {
+                    capacity += 1
+                }
+                res = res.memory.ai_next
+            }
+            addresses.reserveCapacity(capacity)
+            
+            
+            res = res0
+            while res != nil {
+                if res.memory.ai_family == AF_INET {
+                    // Found IPv4 address.
+                    // Wrap the native address structure, and add to results.
+                    let address4 = NSData.init(bytes: res.memory.ai_addr, length: Int(res.memory.ai_addrlen))
+                    addresses.append(address4)
+                }
+                else if res.memory.ai_family == AF_INET6 {
+                    // Found IPv6 address.
+                    // Wrap the native address structure, and add to results.
+                    let address6 = NSData.init(bytes: res.memory.ai_addr, length: Int(res.memory.ai_addrlen))
+                    addresses.append(address6)
+                }
+                res = res.memory.ai_next
+            }
+            freeaddrinfo(res0);
+            
+            guard addresses.count > 0 else {
+               throw GCDAsyncSocketError.GaiError(code: EAI_FAIL)
+            }
+        }
+        return addresses
     }
     
     /**
      * Extracting host and port information from raw address data.
      **/
-    class func hostFromSockaddr4(inout sockaddr4:sockaddr_in) -> String {
-        return ""
+    class func hostFromSockaddr4(sockaddr4:UnsafePointer<sockaddr_in>) -> String? {
+        var addrBuf = [CChar]()
+        addrBuf = [CChar](count: Int(INET_ADDRSTRLEN), repeatedValue: 0)
+        
+        var address4:sockaddr_in = UnsafePointer<sockaddr_in>(sockaddr4).memory
+        inet_ntop(AF_INET, &address4.sin_addr, &addrBuf, socklen_t(INET_ADDRSTRLEN))
+        
+        return String.fromCString(addrBuf)
     }
-    class func hostFromSockaddr6(inout sockaddr6:sockaddr_in6) -> String {
-        return ""
+    class func hostFromSockaddr6(sockaddr6:UnsafePointer<sockaddr_in6>) -> String? {
+        var addrBuf = [CChar]()
+        addrBuf = [CChar](count: Int(INET6_ADDRSTRLEN), repeatedValue: 0)
+        
+        var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(sockaddr6).memory
+        inet_ntop(AF_INET6, &address6.sin6_addr, &addrBuf, socklen_t(INET6_ADDRSTRLEN))
+        
+        
+        return String.fromCString(addrBuf)
     }
     class func portFromSockaddr4(inout sockaddr4:sockaddr_in) -> UInt16 {
-        return 0
+        return sockaddr4.sin_port.bigEndian
     }
     class func portFromSockaddr6(inout sockaddr6:sockaddr_in6) -> UInt16 {
-        return 0
+        return sockaddr6.sin6_port.bigEndian
     }
-    class func urlFromSockaddrUN(inout sockaddrUn:sockaddr_un) -> NSURL {
-        return NSURL(string: "")!
+    class func urlFromSockaddrUN(inout sockaddrUn:sockaddr_un) -> NSURL? {
+        guard let path = String.init(CString: sockaddrUn.getPath(), encoding: NSUTF8StringEncoding) else {
+            return nil
+        }
+        return NSURL(string: path)
     }
-    class func hostFromAddress(address:NSData?) -> String {
-        return ""
+    class func hostFromAddress(address:NSData?) -> String? {
+        var host:String = ""
+        var port:UInt16 = 0
+        if getHost(&host, port:&port, fromAddress: address) {
+            return host
+        }
+        return nil
     }
     class func portFromAddress(address:NSData) -> UInt16 {
         return 0
     }
     class func isIPv4Address(address:NSData) -> Bool {
+        if address.length >= sizeof(sockaddr) {
+            if let sockaddrX:sockaddr = sockaddr(address.bytes.memory) {
+                return sockaddrX.sa_family == sa_family_t(AF_INET)
+            }
+        }
         return false
     }
     class func isIPv6Address(address:NSData) -> Bool {
+        if address.length >= sizeof(sockaddr) {
+            if let sockaddrX:sockaddr = sockaddr(address.bytes.memory) {
+                return sockaddrX.sa_family == sa_family_t(AF_INET6)
+            }
+        }
         return false
     }
-    class func getHost(inout host:String, inout port:UInt16, fromAddress address:NSData) -> Bool {
+    class func getHost(inout host:String, inout port:UInt16, fromAddress address:NSData?) -> Bool {
+        var family = sa_family_t()
+        return getHost(&host, port: &port, family: &family, fromAddress: address)
+    }
+    class func getHost(inout host:String, inout port:UInt16, inout family:sa_family_t, fromAddress addr:NSData?) -> Bool {
+        if let address = addr where address.length >= sizeof(sockaddr) {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
+                if sockaddrX.sa_family == sa_family_t(AF_INET) && address.length >= sizeof(sockaddr_in) {
+                    var address4:sockaddr_in = UnsafePointer<sockaddr_in>(address.bytes).memory
+                    if let h = hostFromSockaddr4(&address4) {
+                        host = h
+                    }
+                    port = portFromSockaddr4(&address4)
+                    family = sa_family_t(AF_INET)
+                    return true
+                }else if sockaddrX.sa_family == sa_family_t(AF_INET6)  && address.length >= sizeof(sockaddr_in6) {
+                    var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(address.bytes).memory
+                    if let h = hostFromSockaddr6(&address6) {
+                        host = h
+                    }
+                    port = portFromSockaddr6(&address6)
+                    family = sa_family_t(AF_INET6)
+                    return true
+                }
+            }
+        }
         return false
     }
-    class func getHost(inout host:String, inout port:UInt16, inout family:sa_family_t, fromAddress address:NSData) -> Bool {
-        return false
+    class func CRLFData() -> NSData? {
+        return "\r\n".dataUsingEncoding(NSUTF8StringEncoding)
     }
-//    class func CRLFData() -> NSData {
-//    
-//    }
+    class func CRData() -> NSData? {
+        return "\r".dataUsingEncoding(NSUTF8StringEncoding)
+    }
+    class func LFData() -> NSData? {
+        return "\n".dataUsingEncoding(NSUTF8StringEncoding)
+    }
+    class func ZeroData() -> NSData? {
+        return "".dataUsingEncoding(NSUTF8StringEncoding)
+    }
+    
 }
