@@ -7,8 +7,8 @@
 //
 
 import XCTest
+//import ifaddrs
 @testable import SwiftAsyncSocket
-import ifaddrs
 
 class SwiftAsyncSocketTests: XCTestCase {
     
@@ -22,25 +22,7 @@ class SwiftAsyncSocketTests: XCTestCase {
         super.tearDown()
     }
     
-    
-    func testWhere() {
-        let t = NSNumber.init(bool: true)
-        let f = NSNumber.init(bool: false)
-        let arr = CFArrayCreate(nil, nil, 0, nil)
-        let dict = ["true":t, "false":f, "array":arr]
-        
-//        let b = dict["bool"]?.boolValue
-        
-//        if let value = dict["wrongKey"] where value == false {
-//            if let t = dict["true"]?.boolValue where t == true {
-//                if let f = dict["false"]?.boolValue where !f {
-//                    return
-//                }
-//            }
-//        }
-        
-        XCTFail()
-    }
+
     
     func testGuard() {
         let packet : GCDAsyncReadPacket? = nil
@@ -78,6 +60,7 @@ class SwiftAsyncSocketTests: XCTestCase {
         }
         print("sun_family: \(nativeAddr.sun_path)")
     }*/
+    /*
     func testMemoryToStructConversion() {
         // This is an example of a functional test case.
         // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -111,7 +94,7 @@ class SwiftAsyncSocketTests: XCTestCase {
                 print("addr4 \(addr4)")
             }
         }
-    }
+    }*/
     
     func testPerformanceExample() {
         // This is an example of a performance test case.

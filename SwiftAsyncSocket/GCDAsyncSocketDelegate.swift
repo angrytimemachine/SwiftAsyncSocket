@@ -39,7 +39,7 @@ protocol GCDAsyncSocketDelegate : AnyObject {
 * By default the new socket will have the same delegate and delegateQueue.
 * You may, of course, change this at any time.
 **/
-    func socket(sock:GCDAsyncSocket, didAcceptNewSocket:GCDAsyncSocket)
+    func socket(sock:GCDAsyncSocket, didAcceptNewSocket newSocket:GCDAsyncSocket)
 
 /**
 * Called when a socket connects and is ready for reading and writing.

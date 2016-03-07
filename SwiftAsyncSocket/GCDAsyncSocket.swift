@@ -30,7 +30,7 @@ let INADDR_LOOPBACK : UInt32 = 0x7f000001
 let GCDAsyncSocketException = "GCDAsyncSocketException"
 let GCDAsyncSocketErrorDomain = "GCDAsyncSocketErrorDomain"
 
-let GCDAsyncSocketQueueName = "GCDAsyncSocket"
+var GCDAsyncSocketQueueName = "GCDAsyncSocket"
 let GCDAsyncSocketThreadName = "GCDAsyncSocket-CFStream"
 
 let GCDAsyncSocketManuallyEvaluateTrust = "GCDAsyncSocketManuallyEvaluateTrust"
@@ -103,7 +103,7 @@ enum GCDAsyncSocketError: ErrorType {
             case .WriteTimeoutError: return "Write operation timed out"
             case .ReadMaxedOutError: return "Read operation reached set maximum length"
             case .ConnectionClosedError: return "Socket closed by remote peer"
-            case let .PosixError(message): return message
+            case let .PosixError(message): return message + " " + String.init(CString: strerror(errno), encoding: NSUTF8StringEncoding)!
             case let .BadConfigError(message): return message
             case let .BadParamError(message): return message
             case let .OtherError(message): return message
@@ -186,7 +186,7 @@ class GCDAsyncSocket {
         {
         get {
             var result : GCDAsyncSocketDelegate? = nil
-            if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
                 result = self._delegate
             }
             else {
@@ -203,7 +203,7 @@ class GCDAsyncSocket {
             self._delegate = newDelegate
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -230,7 +230,7 @@ class GCDAsyncSocket {
         {
         get {
             var result : dispatch_queue_t? = nil
-            if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
                 result = self._delegateQueue
             }
             else {
@@ -252,7 +252,7 @@ class GCDAsyncSocket {
             self._delegateQueue = newDelegateQueue
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -284,7 +284,7 @@ class GCDAsyncSocket {
                 }
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
             
         }
@@ -304,7 +304,7 @@ class GCDAsyncSocket {
            self._delegateQueue = newDelegateQueue
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -338,7 +338,7 @@ class GCDAsyncSocket {
     func isIPv4Enabled() -> Bool {
         var result = false
         // Note: YES means IPv4Disabled is OFF
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.IPv4Disabled)
         }
             else {
@@ -360,7 +360,7 @@ class GCDAsyncSocket {
                 self.config.append(.IPv4Disabled)
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -371,7 +371,7 @@ class GCDAsyncSocket {
     func isIPv6Enabled() -> Bool {
         var result = false
         // Note: YES means kIPv6Disabled is OFF
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.IPv6Disabled)
         }
         else {
@@ -394,7 +394,7 @@ class GCDAsyncSocket {
                 self.config.append(.IPv6Disabled)
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -405,7 +405,7 @@ class GCDAsyncSocket {
     var isIPv4PreferredOverIPv6 : Bool {
         get {
             var result : Bool = false
-            if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
                 result = config.contains(.PreferIPv6)
             }
             else {
@@ -430,7 +430,7 @@ class GCDAsyncSocket {
                 self.config.append(.PreferIPv6)
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -447,7 +447,7 @@ class GCDAsyncSocket {
         {
         get {
             var result : AnyObject? = nil
-            if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+            if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
                 result = self._userData
             }
             else {
@@ -464,7 +464,7 @@ class GCDAsyncSocket {
             self._userData = newUserData
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -490,7 +490,7 @@ class GCDAsyncSocket {
         }
         else
         {
-            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName, nil);
+            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName.cStringUsingEncoding(NSUTF8StringEncoding)!, nil);
         }
         
         setDelegate(aDelegate, synchronously: true)
@@ -527,9 +527,9 @@ class GCDAsyncSocket {
 //        let context = UnsafeMutablePointer<GCDAsyncSocket>.alloc(1)
 //        context.initialize(self)
         var selfPtr = self
-        withUnsafeMutablePointer(&selfPtr) {
-            dispatch_queue_set_specific(socketQueue, GCDAsyncSocketQueueName, $0, nil);
-        }
+//        withUnsafeMutablePointer(&selfPtr) {
+            dispatch_queue_set_specific(socketQueue, &GCDAsyncSocketQueueName, &selfPtr, nil);
+//        }
 
         preBuffer = GCDAsyncSocketPreBuffer.init(withCapacity: 1024 * 4)
         
@@ -549,7 +549,7 @@ class GCDAsyncSocket {
         // This is used by closeWithError to ensure we don't accidentally retain ourself.
         flags.append(GCDAsyncSocketFlags.Dealloc)
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             closeSocket(withError: nil)
             
         }
@@ -635,6 +635,14 @@ class GCDAsyncSocket {
             try self.setReuseOn(socket: socketFD)
             
             // Bind socket
+            guard let interface = interfaceAddress else {
+                close(socketFD)
+                throw GCDAsyncSocketError.OtherError(message: "Inteface was nil")
+            }
+            guard bind(socketFD, UnsafePointer<sockaddr>(interface.bytes), socklen_t(interface.length)) != -1 else {
+                close(socketFD);
+                throw GCDAsyncSocketError.PosixError(message: "Error in bind() function")
+            }
             
             // Listen
             if listen(socketFD, 1024) == -1 {
@@ -758,7 +766,7 @@ class GCDAsyncSocket {
             
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             try block()
         }
         else {
@@ -913,7 +921,7 @@ class GCDAsyncSocket {
      * 
      **/
     func preConnectWithInterface(interface:String) throws -> Bool {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        assert(dispatch_get_specific(&GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
         
         if delegate == nil {
             throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate. Set a delegate first.")
@@ -960,7 +968,7 @@ class GCDAsyncSocket {
         return true
     }
     func preConnectWithUrl(url:NSURL) throws {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        assert(dispatch_get_specific(&GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
         
         if delegate == nil {
             throw GCDAsyncSocketError.BadConfigError(message: "Attempting to connect without a delegate. Set a delegate first.")
@@ -1075,7 +1083,9 @@ class GCDAsyncSocket {
                             }
                             
                             dispatch_async(strongSelf.socketQueue, {
-                                strongSelf.lookupDidSucceed(aStateIndex, withAddress4:address4, address6:address6)
+                                autoreleasepool {
+                                    strongSelf.lookupDidSucceed(aStateIndex, withAddress4:address4, address6:address6)
+                                }
                             })
                             
                         }catch let lookupError {
@@ -1093,7 +1103,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -1217,7 +1227,7 @@ class GCDAsyncSocket {
             throw err
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_sync(socketQueue, block)
@@ -1254,15 +1264,21 @@ class GCDAsyncSocket {
         if let err = error {
             throw err
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_sync(socketQueue, block)
         }
     }
     func lookupDidSucceed(aStateIndex:Int, withAddress4 address4:NSData?, address6:NSData?) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
-        assert(address4 == nil && address6 == nil, "Expected at least one valid address")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
+        guard address4 != nil || address6 != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Expected at least one valid address"))
+            return
+        }
         if aStateIndex != self.stateIndex {
             // The connect operation has been cancelled.
             // That is, socket was disconnected, or connection has already timed out.
@@ -1298,7 +1314,10 @@ class GCDAsyncSocket {
      * The lookupIndex tells us whether the lookup is still valid or not.
      **/
     func lookupDidFail(aStateIndex:Int, withError error:ErrorType) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) == nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         
         if aStateIndex != self.stateIndex {
             print("Ignoring lookup:didFail: - already disconnected")
@@ -1310,7 +1329,10 @@ class GCDAsyncSocket {
         self.closeSocket(withError: error)
     }
     func connectWithAddress4(address4:NSData?, address6:NSData?) throws {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) == nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         
         print("Verbose: IPv4: \(self.dynamicType.hostFromAddress(address4))")
         print("Verbose: IPv6: \(self.dynamicType.hostFromAddress(address6))")
@@ -1376,31 +1398,37 @@ class GCDAsyncSocket {
         let globalConcurrentQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
         dispatch_async(globalConcurrentQueue, {
             [weak self] in
-            var sockAddr = sockaddr(address.bytes.memory)
-            let sockAddrSize = socklen_t(sizeofValue(sockAddr))
-            withUnsafePointer(&sockAddr){
-                let connectResult = connect(socketFD, $0, sockAddrSize)
-                guard connectResult == 0 else {
-                    let error = GCDAsyncSocketError.PosixError(message: "Error in connect() function #\(connectResult)")
-                    if let socketQueue = self?.socketQueue {
-                        dispatch_async(socketQueue, {
-                            autoreleasepool {
-                                self?.didNotConnect(aStateIndex, withError: error)
-                            }
-                        })
-                    }
-                    return;
-                }
-                if self != nil {
-                    self?.didConnect(aStateIndex)
-                }
-                
+            let sockAddrPtr = UnsafePointer<sockaddr>(address.bytes)
+//                let addr = sockAddrPtr.memory
+            let connectResult = connect(socketFD, sockAddrPtr, socklen_t(address.length))
+            guard let strongSelf = self else {
+                print("Warning: self was nil during connectOnBackground()")
+                self?.closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Warning: self was nil during connectOnBackground()"))
+                return
             }
+            
+            dispatch_async(strongSelf.socketQueue, {
+                autoreleasepool {
+                    if connectResult == -1 {
+                        let error = GCDAsyncSocketError.PosixError(message: "Error in connect() function #\(connectResult)")
+                        strongSelf.didNotConnect(aStateIndex, withError: error)
+                    }else{
+                        strongSelf.didConnect(aStateIndex)
+                    }
+                    
+                }
             })
+            
+            
+            
+        })
         print("Verbose: Connecting...");
     }
     func connectWithAddressUN(address:NSData?) throws {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         
         print("Verbose: Creating unix domain socket")
         
@@ -1426,7 +1454,10 @@ class GCDAsyncSocket {
         print("Connecting...")
     }
     func didConnect(aStateIndex:Int) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         
         if aStateIndex != self.stateIndex {
             print("Info: Ignoring didConnect, already disconnected")
@@ -1539,7 +1570,10 @@ class GCDAsyncSocket {
         maybeDequeueWrite()
     }
     func didNotConnect(aStateIndex:Int, withError error:ErrorType?) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         if aStateIndex != self.stateIndex {
             print("Info: Ignoring didNotConnect, already disconnected")
             // The connect operation has been cancelled.
@@ -1602,34 +1636,23 @@ class GCDAsyncSocket {
         closeSocket(withError:GCDAsyncSocketError.TimeoutError())
     }
     func setNonBlocking(socket socketFD:Int32) throws {
-        if fcntl(socketFD, F_SETFL, O_NONBLOCK) == -1 {
+        guard fcntl(socketFD, F_SETFL, O_NONBLOCK) != -1 else {
             close(socketFD)
             throw GCDAsyncSocketError.PosixError(message: "Error enabling non-blocking IO on socket (fcntl)")
         }
     }
     func setNoSigPipe(socket socketFD:Int32) throws {
-//        var nosigpipe = 1
-//        setsockopt(socketFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, socklen_t(sizeofValue(nosigpipe)))
         var noSigPipe:CInt = 1
-        try withUnsafePointer(&noSigPipe) {
-            let setSockOptResult = setsockopt(socketFD, SOL_SOCKET, SO_NOSIGPIPE, $0, socklen_t(sizeofValue(noSigPipe)));
-            guard setSockOptResult == 0 else {
-                throw GCDAsyncSocketError.PosixError(message: "Error in setsockopt() #\(setSockOptResult)")
-            }
+        let setSockOptResult = setsockopt(socketFD, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(sizeofValue(noSigPipe)));
+        guard setSockOptResult == 0 else {
+            throw GCDAsyncSocketError.PosixError(message: "Error in setsockopt() #\(setSockOptResult)")
         }
     }
     func setReuseOn(socket socketFD:Int32) throws {
-//        var reuseOn = 1
-//        if setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuseOn, socklen_t(sizeofValue(reuseOn))) == -1 {
-//            close(socketFD)
-//            throw GCDAsyncSocketError.PosixError(message: "Error enabling address reuse (setsockopt)")
-//        }
         var reuseOn:CInt = 1
-        try withUnsafePointer(&reuseOn) {
-            let setSockOptResult = setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, $0, socklen_t(sizeofValue(reuseOn)));
-            guard setSockOptResult == 0 else {
-                throw GCDAsyncSocketError.PosixError(message: "Error in setsockopt() #\(setSockOptResult)")
-            }
+        let setSockOptResult = setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuseOn, socklen_t(sizeofValue(reuseOn)));
+        guard setSockOptResult == 0 else {
+            throw GCDAsyncSocketError.PosixError(message: "Error in setsockopt() #\(setSockOptResult)")
         }
     }
     
@@ -1638,7 +1661,13 @@ class GCDAsyncSocket {
      // MARK: Disconnecting
      /***********************************************************/
     func closeSocket(withError error:ErrorType?) {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        if error != nil {
+            print("closeSocket: \(error)")
+        }
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         endConnectTimeout()
         if currentRead != nil {
             endCurrentRead()
@@ -1797,7 +1826,7 @@ class GCDAsyncSocket {
                 }
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_sync(socketQueue, block)
@@ -1857,7 +1886,10 @@ class GCDAsyncSocket {
      * or if all reads have completed, and we're set to disconnect after reading.
      **/
     func maybeClose() {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil)
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         var shouldClose = false
         if flags.contains(.DisconnectAfterReads) {
             if readQueue.count == 0 && currentRead == nil {
@@ -1898,10 +1930,10 @@ class GCDAsyncSocket {
         var result = false
         
         let block = {
-            result = self.flags.contains(.SocketStarted)
+            result = !self.flags.contains(.SocketStarted)
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -1917,7 +1949,7 @@ class GCDAsyncSocket {
             result = self.flags.contains(.Connected)
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -1943,7 +1975,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -1968,7 +2000,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -1990,7 +2022,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2015,7 +2047,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2040,7 +2072,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2281,7 +2313,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2326,7 +2358,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2346,7 +2378,7 @@ class GCDAsyncSocket {
             result = self._socket4FD != SOCKET_NULL
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2362,7 +2394,7 @@ class GCDAsyncSocket {
             result = self._socket6FD != SOCKET_NULL
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2383,7 +2415,7 @@ class GCDAsyncSocket {
             result = self.flags.contains(.SocketSecure)
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }
         else {
@@ -2982,7 +3014,7 @@ class GCDAsyncSocket {
             }
         }
         
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_sync(socketQueue, block)
@@ -3001,7 +3033,10 @@ class GCDAsyncSocket {
     * This method also handles auto-disconnect post read/write completion.
     **/
     func maybeDequeueRead() {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         
         guard let theCurrentRead = currentRead where flags.contains(.Connected) else {
             return
@@ -3056,7 +3091,10 @@ class GCDAsyncSocket {
         }
     }
     func flushSSLBuffers() {
-        assert(flags.contains(.SocketSecure), "Cannot flush ssl buffers on non-secure socket")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         guard let thePreBuffer = preBuffer where preBuffer?.availableBytes() == 0 else {
             // Only flush the ssl buffers if the prebuffer is empty.
             // This is to avoid growing the prebuffer inifinitely large.
@@ -3959,7 +3997,7 @@ class GCDAsyncSocket {
                 result = donePtr / totalPtr
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_sync(socketQueue, block)
@@ -3978,7 +4016,10 @@ class GCDAsyncSocket {
     * This method also handles auto-disconnect post read/write completion.
     **/
     func maybeDequeueWrite() {
-        assert(dispatch_get_specific(GCDAsyncSocketQueueName) != nil, "Must be dispatched on socketQueue")
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
+            closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
+            return
+        }
         // If we're not currently processing a write AND we have an available write stream
         guard currentWrite == nil && flags.contains(.Connected) else {
             return
@@ -4714,7 +4755,7 @@ class GCDAsyncSocket {
     }
     /*
     func SSLReadFunction(connection:SSLConnectionRef, data:UnsafeMutablePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus {
-        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else{
             print("What the deuce?")
             return 0
         }
@@ -4723,7 +4764,7 @@ class GCDAsyncSocket {
     }
     
     func SSLWriteFunction(connection:SSLConnectionRef, data:UnsafePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus {
-        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else{
             print("What the deuce?")
             return 0
         }
@@ -4765,7 +4806,7 @@ class GCDAsyncSocket {
         status = SSLSetIOFuncs(theSSLContext,
                                //SSLReadFunction
                                {(connection:SSLConnectionRef, data:UnsafeMutablePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus in
-                                    guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+                                    guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else{
                                         print("What the deuce?")
                                         return 0
                                     }
@@ -4774,7 +4815,7 @@ class GCDAsyncSocket {
                                 },
                                //SSLWriteFunction
                                 {(connection:SSLConnectionRef, data:UnsafePointer<Void>, dataLength:UnsafeMutablePointer<Int>) -> OSStatus in
-                                    guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else{
+                                    guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else{
                                         print("What the deuce?")
                                         return 0
                                     }
@@ -5319,7 +5360,7 @@ class GCDAsyncSocket {
     func autoDisconnectOnClosedReadStream() -> Bool {
         // Note: YES means kAllowHalfDuplexConnection is OFF
         var result:Bool = false
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             result = !config.contains(.AllowHalfDuplexConnection)
         }else{
             dispatch_sync(socketQueue){
@@ -5337,7 +5378,7 @@ class GCDAsyncSocket {
                 self.config.append(.AllowHalfDuplexConnection)
             }
         }
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_async(socketQueue, block)
@@ -5453,7 +5494,7 @@ class GCDAsyncSocket {
      * If you save references to any protected variables and use them outside the block, you do so at your own peril.
      **/
     func performBlock(block:dispatch_block_t) {
-        if dispatch_get_specific(GCDAsyncSocketQueueName) != nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{
             dispatch_async(socketQueue, block)
@@ -5468,7 +5509,7 @@ class GCDAsyncSocket {
      * it might actually have multiple internal socket file descriptors - one for IPv4 and one for IPv6.
      **/
     func socketFD() -> Int32 {
-        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
             print("Warning: socketFD() is only available from within the context of a performBlock() call")
             return SOCKET_NULL
         }
@@ -5478,14 +5519,14 @@ class GCDAsyncSocket {
         return _socket6FD
     }
     func socket4FD() -> Int32 {
-        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
             print("Warning: socket4FD() is only available from within the context of a performBlock() call")
             return SOCKET_NULL
         }
         return _socket4FD
     }
     func socket6FD() -> Int32 {
-        guard dispatch_get_specific(GCDAsyncSocketQueueName) != nil else {
+        guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
             print("Warning: socket6FD() is only available from within the context of a performBlock() call")
             return SOCKET_NULL
         }
@@ -5558,7 +5599,7 @@ class GCDAsyncSocket {
      * Provides access to the socket's SSLContext, if SSL/TLS has been started on the socket.
      **/
     func sslContext() -> SSLContext? {
-        if dispatch_get_specific(GCDAsyncSocketQueueName) == nil {
+        if dispatch_get_specific(&GCDAsyncSocketQueueName) == nil {
             print("sslContext is only available from within a block")
             return nil
         }
@@ -5704,7 +5745,7 @@ class GCDAsyncSocket {
     }
     class func isIPv4Address(address:NSData) -> Bool {
         if address.length >= sizeof(sockaddr) {
-            if let sockaddrX:sockaddr = sockaddr(address.bytes.memory) {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
                 return sockaddrX.sa_family == sa_family_t(AF_INET)
             }
         }
@@ -5712,7 +5753,7 @@ class GCDAsyncSocket {
     }
     class func isIPv6Address(address:NSData) -> Bool {
         if address.length >= sizeof(sockaddr) {
-            if let sockaddrX:sockaddr = sockaddr(address.bytes.memory) {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
                 return sockaddrX.sa_family == sa_family_t(AF_INET6)
             }
         }
