@@ -80,7 +80,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
     * Furthermore, the shouldPreBuffer decision is based upon the packet type,
     * and whether the returned value would fit in the current buffer without requiring a resize of the buffer.
     **/
-    func optimalReadLengthWithDefault(defaultValue: Int, inout shouldPreBuffer : Bool) -> Int {
+    func optimalReadLengthWithDefault(defaultValue: Int, shouldPreBuffer : inout Bool) -> Int {
         var result = 0
         if readLength > 0 {
             // Read a specific length of data
@@ -197,7 +197,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
     * the shouldPreBuffer boolean value will indicate if the data should be read into a prebuffer first,
     * or if the data can be read directly into the read packet's buffer.
     **/
-    func readLengthForTermWithHint(bytesAvailable : Int, inout shouldPreBuffer : Bool) -> Int {
+    func readLengthForTermWithHint(bytesAvailable : Int, shouldPreBuffer : inout Bool) -> Int {
         assert(term != nil, "This method does not apply to non-term reads");
         assert(bytesAvailable > 0, "Invalid parameter: bytesAvailable");
         
@@ -272,7 +272,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
     * It is assumed the terminator has not already been read.
     **/
     
-    func readLengthForTermWithPreBuffer(preBuffer : GCDAsyncSocketPreBuffer, inout found : Bool) -> Int {
+    func readLengthForTermWithPreBuffer(preBuffer : GCDAsyncSocketPreBuffer, found : inout Bool) -> Int {
         assert(term != nil, "This method does not apply to non-term reads");
         assert(preBuffer.availableBytes() > 0, "Invoked with empty pre buffer!");
         

@@ -269,7 +269,7 @@ class GCDAsyncSocket {
     func synchronouslySetDelegateQueue(newDelegateQueue : dispatch_queue_t?) {
         setDelegateQueue(newDelegateQueue, synchronously: true)
     }
-    func getDelegate(inout delegatePtr : UnsafeMutablePointer<GCDAsyncSocketDelegate?>, inout delegateQueuePtr : UnsafeMutablePointer<dispatch_queue_t?>){
+    func getDelegate( delegatePtr : inout UnsafeMutablePointer<GCDAsyncSocketDelegate?>, delegateQueuePtr : inout UnsafeMutablePointer<dispatch_queue_t?>){
         let block = {
             var d = self._delegate
             if delegatePtr != nil {
@@ -2436,7 +2436,7 @@ class GCDAsyncSocket {
     *
     * The returned value is a 'struct sockaddr' wrapped in an NSMutableData object.
     **/
-    func getInterfaceAddress4(inout interfaceAddr4Ptr : NSMutableData?, inout address6 interfaceAddr6Ptr : NSMutableData?, fromDescription interfaceDescription : String?, port : UInt16) {
+    func getInterfaceAddress4( interfaceAddr4Ptr : inout NSMutableData?, address6 interfaceAddr6Ptr : inout NSMutableData?, fromDescription interfaceDescription : String?, port : UInt16) {
         
         var addr4:NSMutableData? = nil
         var addr6:NSMutableData? = nil
@@ -2987,7 +2987,7 @@ class GCDAsyncSocket {
      * Returns progress of the current read, from 0.0 to 1.0, or NaN if no current read (use isnan() to check).
      * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
      **/
-    func progressOfReadReturningTag(inout tagPtr:Int, inout bytesDone:Int, inout total:Int) -> Float {
+    func progressOfReadReturningTag( tagPtr:inout Int, bytesDone:inout Int, total:inout Int) -> Float {
         var result : Float = 0.0
         
         let block = {
@@ -3976,7 +3976,7 @@ class GCDAsyncSocket {
      * Returns progress of the current write, from 0.0 to 1.0, or NaN if no current write (use isnan() to check).
      * The parameters "tag", "done" and "total" will be filled in if they aren't NULL.
      **/
-    func progressOfWriteReturningFlag(inout tagPtr:Int, inout bytesDone donePtr:Float, inout totalPtr:Float) -> Float {
+    func progressOfWriteReturningFlag( tagPtr:inout Int, bytesDone donePtr:inout Float, totalPtr:inout Float) -> Float {
         var result:Float = 0.0
         
         let block = {
@@ -5302,10 +5302,10 @@ class GCDAsyncSocket {
     func unscheduleCFStreams(asyncSocket:GCDAsyncSocket){
     
     }
-    static func CFReadStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, inout pInfo:UnsafeMutablePointer<CInt>) {
+    static func CFReadStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, pInfo:inout UnsafeMutablePointer<CInt>) {
     
     }
-    static func CFWriteStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, inout pInfo:UnsafeMutablePointer<CInt>) {
+    static func CFWriteStreamCallback(stream:CFReadStreamRef, type:CFStreamEventType, pInfo:inout UnsafeMutablePointer<CInt>) {
     
     }
     func createReadAndWriteStream() -> Bool {
@@ -5720,13 +5720,13 @@ class GCDAsyncSocket {
         
         return String.fromCString(addrBuf)
     }
-    class func portFromSockaddr4(inout sockaddr4:sockaddr_in) -> UInt16 {
+    class func portFromSockaddr4( sockaddr4:inout sockaddr_in) -> UInt16 {
         return sockaddr4.sin_port.bigEndian
     }
-    class func portFromSockaddr6(inout sockaddr6:sockaddr_in6) -> UInt16 {
+    class func portFromSockaddr6( sockaddr6:inout sockaddr_in6) -> UInt16 {
         return sockaddr6.sin6_port.bigEndian
     }
-    class func urlFromSockaddrUN(inout sockaddrUn:sockaddr_un) -> NSURL? {
+    class func urlFromSockaddrUN( sockaddrUn:inout sockaddr_un) -> NSURL? {
         guard let path = String.init(CString: sockaddrUn.getPath(), encoding: NSUTF8StringEncoding) else {
             return nil
         }
@@ -5759,11 +5759,11 @@ class GCDAsyncSocket {
         }
         return false
     }
-    class func getHost(inout host:String, inout port:UInt16, fromAddress address:NSData?) -> Bool {
+    class func getHost( host:inout String, port:inout UInt16, fromAddress address:NSData?) -> Bool {
         var family = sa_family_t()
         return getHost(&host, port: &port, family: &family, fromAddress: address)
     }
-    class func getHost(inout host:String, inout port:UInt16, inout family:sa_family_t, fromAddress addr:NSData?) -> Bool {
+    class func getHost( host:inout String, port:inout UInt16, family:inout sa_family_t, fromAddress addr:NSData?) -> Bool {
         if let address = addr where address.length >= sizeof(sockaddr) {
             if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
                 if sockaddrX.sa_family == sa_family_t(AF_INET) && address.length >= sizeof(sockaddr_in) {
