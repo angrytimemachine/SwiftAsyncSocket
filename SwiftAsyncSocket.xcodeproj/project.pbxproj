@@ -44,7 +44,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		3829CD781C82D0BA0058732C /* Array_Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Array_Extension.swift; sourceTree = "<group>"; };
+		38283C631C8F6504008F2BEB /* Package.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		38283C691C8F67B1008F2BEB /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = module.modulemap; sourceTree = "<group>"; };
+		3829CD781C82D0BA0058732C /* Array_Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Array_Extension.swift; path = Source/Array_Extension.swift; sourceTree = "<group>"; };
 		3829CD8F1C8A58750058732C /* ConnectionTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConnectionTests.swift; sourceTree = "<group>"; };
 		382AD4951C670EE400698988 /* SwiftAsyncSocket.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SwiftAsyncSocket.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		382AD4981C670EE400698988 /* SwiftAsyncSocket.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SwiftAsyncSocket.h; sourceTree = "<group>"; };
@@ -52,15 +54,13 @@
 		382AD49F1C670EE400698988 /* SwiftAsyncSocketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftAsyncSocketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		382AD4A41C670EE400698988 /* SwiftAsyncSocketTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftAsyncSocketTests.swift; sourceTree = "<group>"; };
 		382AD4A61C670EE400698988 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncReadPacket.swift; sourceTree = "<group>"; };
-		382AD4B21C67116700698988 /* GCDAsyncSocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocket.swift; sourceTree = "<group>"; };
-		382AD4B31C67116700698988 /* GCDAsyncSocketDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocketDelegate.swift; sourceTree = "<group>"; };
-		382AD4B41C67116700698988 /* GCDAsyncSocketPreBuffer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSocketPreBuffer.swift; sourceTree = "<group>"; };
-		382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncSpecialPacket.swift; sourceTree = "<group>"; };
-		382AD4B61C67116700698988 /* GCDAsyncWritePacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GCDAsyncWritePacket.swift; sourceTree = "<group>"; };
-		382AD4EF1C67206A00698988 /* GCDAsyncSocket.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = GCDAsyncSocket.m; path = SwiftAsyncSocket/GCDAsyncSocket.m; sourceTree = "<group>"; };
-		383791571C6E7156007F357D /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = module.modulemap; path = SwiftAsyncSocket/module.modulemap; sourceTree = "<group>"; };
-		3883B2021C6F095F0000AC45 /* sockaddr_un_extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = sockaddr_un_extension.swift; sourceTree = "<group>"; };
+		382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncReadPacket.swift; path = Source/GCDAsyncReadPacket.swift; sourceTree = "<group>"; };
+		382AD4B21C67116700698988 /* GCDAsyncSocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncSocket.swift; path = Source/GCDAsyncSocket.swift; sourceTree = "<group>"; };
+		382AD4B31C67116700698988 /* GCDAsyncSocketDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncSocketDelegate.swift; path = Source/GCDAsyncSocketDelegate.swift; sourceTree = "<group>"; };
+		382AD4B41C67116700698988 /* GCDAsyncSocketPreBuffer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncSocketPreBuffer.swift; path = Source/GCDAsyncSocketPreBuffer.swift; sourceTree = "<group>"; };
+		382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncSpecialPacket.swift; path = Source/GCDAsyncSpecialPacket.swift; sourceTree = "<group>"; };
+		382AD4B61C67116700698988 /* GCDAsyncWritePacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GCDAsyncWritePacket.swift; path = Source/GCDAsyncWritePacket.swift; sourceTree = "<group>"; };
+		3883B2021C6F095F0000AC45 /* sockaddr_un_extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = sockaddr_un_extension.swift; path = Source/sockaddr_un_extension.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,11 +82,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		38283C621C8E9630008F2BEB /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				382AD4B21C67116700698988 /* GCDAsyncSocket.swift */,
+				382AD4B31C67116700698988 /* GCDAsyncSocketDelegate.swift */,
+				382AD4B41C67116700698988 /* GCDAsyncSocketPreBuffer.swift */,
+				382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */,
+				382AD4B61C67116700698988 /* GCDAsyncWritePacket.swift */,
+				382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */,
+				3883B2021C6F095F0000AC45 /* sockaddr_un_extension.swift */,
+				3829CD781C82D0BA0058732C /* Array_Extension.swift */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
 		382AD48B1C670EE400698988 = {
 			isa = PBXGroup;
 			children = (
-				382AD4EF1C67206A00698988 /* GCDAsyncSocket.m */,
-				383791571C6E7156007F357D /* module.modulemap */,
 				382AD4971C670EE400698988 /* SwiftAsyncSocket */,
 				382AD4A31C670EE400698988 /* SwiftAsyncSocketTests */,
 				382AD4961C670EE400698988 /* Products */,
@@ -105,16 +118,11 @@
 		382AD4971C670EE400698988 /* SwiftAsyncSocket */ = {
 			isa = PBXGroup;
 			children = (
-				382AD4981C670EE400698988 /* SwiftAsyncSocket.h */,
 				382AD49A1C670EE400698988 /* Info.plist */,
-				382AD4B21C67116700698988 /* GCDAsyncSocket.swift */,
-				382AD4B31C67116700698988 /* GCDAsyncSocketDelegate.swift */,
-				382AD4B41C67116700698988 /* GCDAsyncSocketPreBuffer.swift */,
-				382AD4B11C67116700698988 /* GCDAsyncReadPacket.swift */,
-				382AD4B61C67116700698988 /* GCDAsyncWritePacket.swift */,
-				382AD4B51C67116700698988 /* GCDAsyncSpecialPacket.swift */,
-				3883B2021C6F095F0000AC45 /* sockaddr_un_extension.swift */,
-				3829CD781C82D0BA0058732C /* Array_Extension.swift */,
+				382AD4981C670EE400698988 /* SwiftAsyncSocket.h */,
+				38283C691C8F67B1008F2BEB /* module.modulemap */,
+				38283C631C8F6504008F2BEB /* Package.swift */,
+				38283C621C8E9630008F2BEB /* Source */,
 			);
 			path = SwiftAsyncSocket;
 			sourceTree = "<group>";
@@ -152,6 +160,7 @@
 				382AD4921C670EE400698988 /* Headers */,
 				382AD4931C670EE400698988 /* Resources */,
 				382A1F5D1C6723E100788BE0 /* CopyFiles */,
+				38283C611C8E9318008F2BEB /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -232,6 +241,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		38283C611C8E9318008F2BEB /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#/Applications/Docker/Docker Quickstart Terminal.app/Contents/Resources/Scripts/start.sh &&";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		382AD4901C670EE400698988 /* Sources */ = {

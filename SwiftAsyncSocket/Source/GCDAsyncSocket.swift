@@ -13,10 +13,20 @@
 
 
 import Foundation
-import ifaddrs
+import Dispatch
+import CIfaddrs
+
 #if iOS
     import CFNetwork
 #endif
+#if os(Linux)
+    import Glibc
+    
+#else
+    import Darwin
+#endif
+
+public typealias Block = () -> Void
 
 /**
 * A socket file descriptor is really just an integer.
@@ -5493,7 +5503,7 @@ class GCDAsyncSocket {
      *
      * If you save references to any protected variables and use them outside the block, you do so at your own peril.
      **/
-    func performBlock(block:dispatch_block_t) {
+    func performBlock(block:Block) {
         if dispatch_get_specific(&GCDAsyncSocketQueueName) != nil {
             block()
         }else{

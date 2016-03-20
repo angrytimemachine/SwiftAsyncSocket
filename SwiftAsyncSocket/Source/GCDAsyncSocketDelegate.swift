@@ -7,6 +7,12 @@
 //
 
 import Foundation
+import Dispatch
+#if os(Linux)
+    import Glibc
+#else
+    import Darwin
+#endif
 
 protocol GCDAsyncSocketDelegate : AnyObject {
 /**
