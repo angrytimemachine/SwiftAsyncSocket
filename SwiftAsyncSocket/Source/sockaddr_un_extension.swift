@@ -13,7 +13,7 @@ extension sockaddr_un {
     /// Copies `path` into `sun_path`. Values located over the 104th index are
     /// not copied.
     mutating func setPath(path: UnsafePointer<Int8>, length: Int) {
-        var array = [Int8](count: 104, repeatedValue: 0)
+        var array = [Int8](repeating: 0, count: 104)
         for i in 0..<length {
             array[i] = path[i]
         }
@@ -136,7 +136,7 @@ extension sockaddr_un {
     }
     // Retrieves `sun_path` into an arary.
     func getPath() -> [Int8] {
-        var path = [Int8](count: 104, repeatedValue: 0)
+        var path = [Int8](repeating: 0, count: 104)
         
         path[0] = sun_path.0
         path[1] = sun_path.1

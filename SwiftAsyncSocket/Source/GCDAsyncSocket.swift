@@ -57,7 +57,7 @@ let GCDAsyncSocketSSLCipherSuites = "GCDAsyncSocketSSLCipherSuites"
 let GCDAsyncSocketSSLDiffieHellmanParameters = "GCDAsyncSocketSSLDiffieHellmanParameters"
 #endif
 
-struct GCDAsyncSocketFlags : OptionSetType {
+struct GCDAsyncSocketFlags : OptionSet {
     let rawValue: Int
     init(rawValue: Int) { self.rawValue = rawValue }
     static let SocketStarted                 = GCDAsyncSocketFlags(rawValue: 0)  // If set, socket has been started (accepting/connecting)
@@ -84,7 +84,7 @@ struct GCDAsyncSocketFlags : OptionSetType {
     #endif
 };
 
-struct GCDAsyncSocketConfig : OptionSetType {
+struct GCDAsyncSocketConfig : OptionSet {
     let rawValue: Int
     init(rawValue: Int) { self.rawValue = rawValue }
     static let IPv4Disabled              = GCDAsyncSocketConfig(rawValue: 0)  // If set, IPv4 is disabled
@@ -93,7 +93,7 @@ struct GCDAsyncSocketConfig : OptionSetType {
     static let AllowHalfDuplexConnection = GCDAsyncSocketConfig(rawValue: 3)  // If set, the socket will stay open even if the read stream closes
 };
 
-enum GCDAsyncSocketError: ErrorType {
+enum GCDAsyncSocketError: ErrorProtocol {
     case TimeoutError()
     case WriteTimeoutError()
     case ReadMaxedOutError()
@@ -113,12 +113,12 @@ enum GCDAsyncSocketError: ErrorType {
             case .WriteTimeoutError: return "Write operation timed out"
             case .ReadMaxedOutError: return "Read operation reached set maximum length"
             case .ConnectionClosedError: return "Socket closed by remote peer"
-            case let .PosixError(message): return message + " " + String.init(CString: strerror(errno), encoding: NSUTF8StringEncoding)!
+            case let .PosixError(message): return message + " " + String.init(CString: strerror(errno), encoding: NSUTF8StringEncoding)
             case let .BadConfigError(message): return message
             case let .BadParamError(message): return message
             case let .OtherError(message): return message
             case let .SSLError(code): return "Error code \(code) definition can be found in Apple's SecureTransport.h"
-            case let .GaiError(code): return String.init(CString: gai_strerror(code), encoding: NSUTF8StringEncoding)!
+            case let .GaiError(code): return String.init(CString: gai_strerror(code), encoding: NSUTF8StringEncoding)
             }
         }
     }
@@ -362,8 +362,8 @@ class GCDAsyncSocket {
         let block = {
             if flag {
                 //if it was disabled, remove it
-                if let index = self.config.indexOf(.IPv4Disabled) {
-                    self.config.removeAtIndex(index)
+                if let index = self.config.index(of:.IPv4Disabled) {
+                    self.config.remove(at:index)
                 }
             }else{
                 //disable it
@@ -395,8 +395,8 @@ class GCDAsyncSocket {
         let block = {
             if flag {
                 //if it was disabled, remove it
-                if let index = self.config.indexOf(.IPv6Disabled) {
-                    self.config.removeAtIndex(index)
+                if let index = self.config.index(of:.IPv6Disabled) {
+                    self.config.remove(at:index)
                 }
             }
             else {
@@ -432,8 +432,8 @@ class GCDAsyncSocket {
         // Note: YES means PreferIPv6 is OFF
         let block = {
             if flag {
-                if let i = self.config.indexOf(.PreferIPv6) {
-                    self.config.removeAtIndex(i)
+                if let i = self.config.index(of:.PreferIPv6) {
+                    self.config.remove(at:i)
                 }
             }
             else {
@@ -500,7 +500,7 @@ class GCDAsyncSocket {
         }
         else
         {
-            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName.cStringUsingEncoding(NSUTF8StringEncoding)!, nil);
+            socketQueue = dispatch_queue_create(GCDAsyncSocketQueueName.cString(usingEncoding:NSUTF8StringEncoding)!, nil);
         }
         
         setDelegate(aDelegate, synchronously: true)
@@ -545,13 +545,13 @@ class GCDAsyncSocket {
         
     }
     convenience init() {
-        self.init(withDelegate:.None, delegateQueue:.None, socketQueue:.None)
+        self.init(withDelegate:Optional.none, delegateQueue:Optional.none, socketQueue:Optional.none)
     }
     convenience init(withSocketQueue sq: dispatch_queue_t) {
-        self.init(withDelegate:.None, delegateQueue:.None, socketQueue:sq)
+        self.init(withDelegate:Optional.none, delegateQueue:Optional.none, socketQueue:sq)
     }
     convenience init(withDelegate aDelegate : GCDAsyncSocketDelegate, withDelegateQueue dq: dispatch_queue_t) {
-        self.init(withDelegate:aDelegate, delegateQueue:dq, socketQueue:.None)
+        self.init(withDelegate:aDelegate, delegateQueue:dq, socketQueue:Optional.none)
     }
     
     deinit {
@@ -716,7 +716,7 @@ class GCDAsyncSocket {
                     // No specific port was specified, so we allowed the OS to pick an available port for us.
                     // Now we need to make sure the IPv6 socket listens on the same port as the IPv4 socket.
                     
-                    var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6!.bytes).memory
+                    var addr6 : sockaddr_in6 = UnsafePointer<sockaddr_in6>(interface6!.bytes).pointee
                     addr6.sin6_port = self.localPort4().bigEndian;//bigEndian instead of htons
                 }
                 self._socket6FD = try createSocket(AF_INET6, interface6)
@@ -780,7 +780,7 @@ class GCDAsyncSocket {
             try block()
         }
         else {
-            var error : ErrorType? = nil
+            var error : ErrorProtocol? = nil
             dispatch_sync(socketQueue){
                 do {
                     try block()
@@ -1046,7 +1046,7 @@ class GCDAsyncSocket {
      **/
     func connectToHost(host:String, onPort port:UInt16, viaInterface interface:String, withTimeout timeout:NSTimeInterval) throws {
         print("connectToHost:onPort:viaInterface:withTimeout")
-        var error : ErrorType? = nil
+        var error : ErrorProtocol? = nil
         // Just in case immutable objects were passed
         let block = {
             autoreleasepool {
@@ -1181,14 +1181,14 @@ class GCDAsyncSocket {
      **/
     func connectToAddress(remoteAddr:NSData, viaInterace interface:String, withTimeout timeout:NSTimeInterval) throws {
         
-        var error : ErrorType? = nil
+        var error : ErrorProtocol? = nil
         let block = {
             autoreleasepool {
                 // Check for problems with remoteAddr parameter
                 var address4 : NSData?
                 var address6 : NSData?
                 if remoteAddr.length >= sizeof(sockaddr) {
-                    let socketaddr = sockaddr(remoteAddr.bytes.memory)
+                    let socketaddr = sockaddr(remoteAddr.bytes.pointee)
                     switch socketaddr.sa_family {
                     case sa_family_t(AF_INET) where remoteAddr.length == sizeof(sockaddr_in):
                         address4 = remoteAddr
@@ -1247,7 +1247,7 @@ class GCDAsyncSocket {
      * Connects to the unix domain socket at the given url, using the specified timeout.
      */
     func connectToUrl(url:NSURL, withTimeout timeout:NSTimeInterval) throws {
-        var error : ErrorType? = nil
+        var error : ErrorProtocol? = nil
         let block : dispatch_block_t = {
             autoreleasepool {
                 do {
@@ -1323,7 +1323,7 @@ class GCDAsyncSocket {
      * the original connection request may have already been cancelled or timed-out by the time this method is invoked.
      * The lookupIndex tells us whether the lookup is still valid or not.
      **/
-    func lookupDidFail(aStateIndex:Int, withError error:ErrorType) {
+    func lookupDidFail(aStateIndex:Int, withError error:ErrorProtocol) {
         guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
             closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
             return
@@ -1388,7 +1388,7 @@ class GCDAsyncSocket {
                 try setReuseOn(socket: socketFD)
             }
         }
-        var interfaceAddr = sockaddr(connInterace.bytes.memory)
+        var interfaceAddr = sockaddr(connInterace.bytes.pointee)
         let interfaceSize = socklen_t(sizeofValue(interfaceAddr))
         try withUnsafePointer(&interfaceAddr){
             let bindResult = bind(socketFD, $0, interfaceSize)
@@ -1409,7 +1409,7 @@ class GCDAsyncSocket {
         dispatch_async(globalConcurrentQueue, {
             [weak self] in
             let sockAddrPtr = UnsafePointer<sockaddr>(address.bytes)
-//                let addr = sockAddrPtr.memory
+//                let addr = sockAddrPtr.pointee
             let connectResult = connect(socketFD, sockAddrPtr, socklen_t(address.length))
             guard let strongSelf = self else {
                 print("Warning: self was nil during connectOnBackground()")
@@ -1579,7 +1579,7 @@ class GCDAsyncSocket {
         maybeDequeueRead()
         maybeDequeueWrite()
     }
-    func didNotConnect(aStateIndex:Int, withError error:ErrorType?) {
+    func didNotConnect(aStateIndex:Int, withError error:ErrorProtocol?) {
         guard dispatch_get_specific(&GCDAsyncSocketQueueName) != nil else {
             closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Must be dispatched on socketQueue"))
             return
@@ -1670,7 +1670,7 @@ class GCDAsyncSocket {
      /***********************************************************/
      // MARK: Disconnecting
      /***********************************************************/
-    func closeSocket(withError error:ErrorType?) {
+    func closeSocket(withError error:ErrorProtocol?) {
         if error != nil {
             print("closeSocket: \(error)")
         }
@@ -2454,7 +2454,7 @@ class GCDAsyncSocket {
         var thePort = port
         
         if let interfaceDesc = interfaceDescription {
-            let components = interfaceDesc.characters.split(":").map{String($0)}
+            let components = interfaceDesc.characters.split(separator: ":").map{String($0)}
             if let temp = components.first {
                 interface = temp
             }
@@ -2491,21 +2491,21 @@ class GCDAsyncSocket {
                 parseAddresses(INADDR_LOOPBACK, in6addr_loopback)
             }
             else {
-                let iface = theInterface.cStringUsingEncoding(NSUTF8StringEncoding)
+                let iface = theInterface.cString(usingEncoding:NSUTF8StringEncoding)
                 var addrs : UnsafeMutablePointer<ifaddrs> = nil
                 var cursor : UnsafeMutablePointer<ifaddrs> = nil
                 if getifaddrs(&addrs) == 0 {
                     cursor = addrs
                     while cursor != nil {
-                        if addr4 == nil && Int32(cursor.memory.ifa_addr.memory.sa_family) == AF_INET{
+                        if addr4 == nil && Int32(cursor.pointee.ifa_addr.pointee.sa_family) == AF_INET{
                             // IPv4
-                            var nativeAddr4:sockaddr_in = UnsafeMutablePointer<sockaddr_in>(cursor).memory
-                            if strcmp(cursor.memory.ifa_name, iface!) == 0 {
+                            var nativeAddr4:sockaddr_in = UnsafeMutablePointer<sockaddr_in>(cursor).pointee
+                            if strcmp(cursor.pointee.ifa_name, iface!) == 0 {
                                 // Name match
                                 nativeAddr4.sin_port = port.bigEndian//bigEndian instead of htons
                                 addr4 = NSMutableData.init(bytes:&nativeAddr4, length: sizeofValue(nativeAddr4))
                             }else{
-                                var ipAddressString = [CChar](count:Int(INET_ADDRSTRLEN), repeatedValue: 0)
+                                var ipAddressString = [CChar](repeating: 0, count:Int(INET_ADDRSTRLEN))
                                 let conversion = inet_ntop(AF_INET, &nativeAddr4.sin_addr, &ipAddressString, socklen_t(INET_ADDRSTRLEN))
                                 if conversion != nil && strcmp(ipAddressString, iface!) == 0 {
                                     // IP match
@@ -2513,15 +2513,15 @@ class GCDAsyncSocket {
                                 }
                             }
                             addr4 = NSMutableData.init(bytes:&nativeAddr4, length: sizeofValue(nativeAddr4))
-                        }else if addr6 == nil && Int32(cursor.memory.ifa_addr.memory.sa_family) == AF_INET6 {
+                        }else if addr6 == nil && Int32(cursor.pointee.ifa_addr.pointee.sa_family) == AF_INET6 {
                             // IPv6
-                            var nativeAddr6:sockaddr_in6 = UnsafeMutablePointer<sockaddr_in6>(cursor).memory
-                            if strcmp(cursor.memory.ifa_name, iface!) == 0 {
+                            var nativeAddr6:sockaddr_in6 = UnsafeMutablePointer<sockaddr_in6>(cursor).pointee
+                            if strcmp(cursor.pointee.ifa_name, iface!) == 0 {
                                 // Name match
                                 nativeAddr6.sin6_port = port.bigEndian//bigEndian instead of htons
                                 addr6 = NSMutableData.init(bytes:&nativeAddr6, length: sizeofValue(nativeAddr6))
                             }else{
-                                var ipAddressString = [CChar](count:Int(INET6_ADDRSTRLEN), repeatedValue: 0)
+                                var ipAddressString = [CChar](repeating: 0, count:Int(INET6_ADDRSTRLEN))
                                 let conversion = inet_ntop(AF_INET, &nativeAddr6.sin6_addr, &ipAddressString, socklen_t(INET6_ADDRSTRLEN))
                                 if conversion != nil && strcmp(ipAddressString, iface!) == 0 {
                                     // IP match
@@ -2530,7 +2530,7 @@ class GCDAsyncSocket {
                             }
                             addr6 = NSMutableData.init(bytes:&nativeAddr6, length: sizeofValue(nativeAddr6))
                         }
-                        cursor = cursor.memory.ifa_next;
+                        cursor = cursor.pointee.ifa_next;
                     }
                 }
                 freeifaddrs(addrs)
@@ -2550,7 +2550,7 @@ class GCDAsyncSocket {
         var nativeAddr = sockaddr_un()
         nativeAddr.sun_family = sa_family_t(AF_UNIX)
         
-        let length = path.lengthOfBytesUsingEncoding(NSUTF8StringEncoding)
+        let length = path.lengthOfBytes(usingEncoding:NSUTF8StringEncoding)
         nativeAddr.setPath(path, length:length)
         
         let lengthOfPath = path.withCString { Int(strlen($0)) }
@@ -2653,8 +2653,8 @@ class GCDAsyncSocket {
         // We will not be able to read until data arrives.
         // But we should be able to write immediately.
         socketFDBytesAvailable = 0
-        if let index = flags.indexOf(.ReadSourceSuspended) {
-            flags.removeAtIndex(index)
+        if let index = flags.index(of:.ReadSourceSuspended) {
+            flags.remove(at:index)
         }
         
         print("Verbose: dispatch_resume(readSource)")
@@ -2695,8 +2695,8 @@ class GCDAsyncSocket {
             print("Verbose: dispatch_resume(readSource)")
             
             dispatch_resume(readSource!)
-            if let index = flags.indexOf(.ReadSourceSuspended) {
-                flags.removeAtIndex(index)
+            if let index = flags.index(of:.ReadSourceSuspended) {
+                flags.remove(at:index)
             }
         }
     }
@@ -2713,8 +2713,8 @@ class GCDAsyncSocket {
             print("Verbose: dispatch_resume(writeSource)")
             
             dispatch_resume(writeSource!)
-            if let index = flags.indexOf(.WriteSourceSuspended) {
-                flags.removeAtIndex(index)
+            if let index = flags.index(of:.WriteSourceSuspended) {
+                flags.remove(at:index)
             }
         }
     }
@@ -3020,7 +3020,7 @@ class GCDAsyncSocket {
                 tagPtr = 0
                 bytesDone = 0
                 total = 0
-                result = Float.NaN
+                result = Float.nan
             }
         }
         
@@ -3125,8 +3125,8 @@ class GCDAsyncSocket {
                 if result > 0 {
                     thePreBuffer.didWrite(bytes: result)
                 }
-                if let index = flags.indexOf(.SecureSocketHasBytesAvailable) {
-                    flags.removeAtIndex(index)
+                if let index = flags.index(of:.SecureSocketHasBytesAvailable) {
+                    flags.remove(at:index)
                 }
             }
             return
@@ -3300,7 +3300,7 @@ class GCDAsyncSocket {
         }
         
         var done = false // Completed read operation
-        var error:ErrorType? = nil // Error occurred
+        var error:ErrorProtocol? = nil // Error occurred
         var totalBytesReadForCurrentRead = 0
         
         
@@ -3398,7 +3398,7 @@ class GCDAsyncSocket {
                     }else if let packetBuffer = theCurrentRead.buffer {
                         theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
                         buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
-                        buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                        buffer!.advanced(by:theCurrentRead.startOffset + theCurrentRead.bytesDone)
                     }
                     // Read data into buffer
                     let result:CFIndex = CFReadStream(readStream, buffer, bytesToRead)
@@ -3444,7 +3444,7 @@ class GCDAsyncSocket {
                     }else if let packetBuffer = theCurrentRead.buffer {
                         theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
                         buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
-                        buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                        buffer!.advanced(by:theCurrentRead.startOffset + theCurrentRead.bytesDone)
                     }
                     
                     // The documentation from Apple states:
@@ -3464,7 +3464,7 @@ class GCDAsyncSocket {
                             error = GCDAsyncSocketError.OtherError(message: "Failed to get buffer in doReadData")
                             return;
                         }
-                        loopBuffer.advancedBy(bytesRead)
+                        loopBuffer.advanced(by:bytesRead)
                         let loopBytesToRead = bytesToRead - bytesRead
                         var loopBytesRead = 0
                         result = SSLRead(theSslContext, loopBuffer, loopBytesToRead, &loopBytesRead)
@@ -3523,7 +3523,7 @@ class GCDAsyncSocket {
                 }else if let packetBuffer = theCurrentRead.buffer {
                     theCurrentRead.ensureCapacityForAdditionalDataOfLength(bytesToRead)
                     buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
-                    buffer!.advancedBy(theCurrentRead.startOffset + theCurrentRead.bytesDone)
+                    buffer!.advanced(by:theCurrentRead.startOffset + theCurrentRead.bytesDone)
                 }
                 // Read data into buffer
                 guard let theBuffer = buffer else {
@@ -3603,7 +3603,7 @@ class GCDAsyncSocket {
 //                        closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Failed to get the read buffer"))
 //                        return
 //                    }
-//                    readBuf.advancedBy(theCurrentRead.startOffset+theCurrentRead.bytesDone)
+//                    readBuf.advanced(by:theCurrentRead.startOffset+theCurrentRead.bytesDone)
 //                    readBuf.initializeFrom(thePreBuffer.readBuffer(), count: bytesToCopy)
                     
                     // Remove the copied bytes from the prebuffer
@@ -3639,7 +3639,7 @@ class GCDAsyncSocket {
                         }
                         thePreBuffer.ensureCapacityForWrite(overflow)
                         
-                        guard let overflowBuffer = buffer?.advancedBy(overflow) else {
+                        guard let overflowBuffer = buffer?.advanced(by:overflow) else {
                             closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Failed to get the overflow buffer"))
                             return;
                         }
@@ -3745,7 +3745,7 @@ class GCDAsyncSocket {
         }
         
         var shouldDisconnect = false
-        var error:ErrorType? = nil
+        var error:ErrorProtocol? = nil
         
         if flags.contains(.StartingReadTLS) || flags.contains(.StartingWriteTLS) {
             // We received an EOF during or prior to startTLS.
@@ -3775,7 +3775,7 @@ class GCDAsyncSocket {
             //
             // Query the socket to see if it is still writeable. (Perhaps the peer will continue reading data from us)
             let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
-            var pfd = [pollfd].init(count: 2, repeatedValue: pollfd())
+            var pfd = [pollfd].init(repeating:pollfd(), count: 2)
             pfd[0].fd = socketFD
             pfd[0].events = Int16(POLLOUT)
             pfd[0].revents = 0
@@ -3849,7 +3849,7 @@ class GCDAsyncSocket {
                 packetBuffer.length = buffSize
             }
             let buffer = UnsafeMutablePointer<CInt>(packetBuffer.mutableBytes)
-            buffer.advancedBy(theCurrentRead.startOffset)
+            buffer.advanced(by:theCurrentRead.startOffset)
             result = NSData.init(bytesNoCopy: buffer, length: theCurrentRead.bytesDone, freeWhenDone:false)
         }
         if let theDelegate = _delegate , let theDelegateQueue = _delegateQueue {
@@ -3935,8 +3935,8 @@ class GCDAsyncSocket {
                 dispatch_source_set_timer(readTimer!, tt, DISPATCH_TIME_FOREVER, 0)
                 
                 // Unpause reads, and continue
-                if let index = flags.indexOf(.ReadsPaused) {
-                    flags.removeAtIndex(index)
+                if let index = flags.index(of:.ReadsPaused) {
+                    flags.remove(at:index)
                 }
                 doReadData()
             }
@@ -3996,7 +3996,7 @@ class GCDAsyncSocket {
                 donePtr = Float(theCurrentWrite.bytesDone)
                 totalPtr = Float(theCurrentWrite.buffer.length)
                 
-                result = Float.NaN
+                result = Float.nan
                 
             }else{
                 // We're not writing anything right now.
@@ -4114,7 +4114,7 @@ class GCDAsyncSocket {
         
         // Note: This method is not called if currentWrite is a GCDAsyncSpecialPacket (startTLS packet)
         var waiting = false
-        var error:ErrorType? = nil
+        var error:ErrorProtocol? = nil
         var bytesWritten = 0
         guard let theCurrentWrite = currentWrite else{
             closeSocket(withError: GCDAsyncSocketError.OtherError(message: "currentWrite was nil in doWriteData()"))
@@ -4128,7 +4128,7 @@ class GCDAsyncSocket {
                     //
                 if let theCurrentWrite = currentWrite {
                     let buffer = theCurrentWrite.buffer.bytes
-                    buffer.advancedBy(theCurrentWrite.bytesDone)
+                    buffer.advanced(by:theCurrentWrite.bytesDone)
                     let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone
 //                    if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
 //                    {
@@ -4179,7 +4179,7 @@ class GCDAsyncSocket {
                 
                 if hasNewDataToWrite {
                     let buffer = theCurrentWrite.buffer.bytes
-                    buffer.advancedBy(theCurrentWrite.bytesDone+bytesWritten)
+                    buffer.advanced(by:theCurrentWrite.bytesDone+bytesWritten)
                     let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone - bytesWritten
 //                    if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
 //                    {
@@ -4195,7 +4195,7 @@ class GCDAsyncSocket {
                             result = SSLWrite(theSSLContext, buffer, sslBytesToWrite, $0)
                         }
                         if result == noErr {
-                            buffer.advancedBy(sslBytesWritten)
+                            buffer.advanced(by:sslBytesWritten)
                             bytesWritten += sslBytesWritten
                             bytesRemaining -= sslBytesWritten
                             keepLooping = bytesRemaining > 0
@@ -4217,7 +4217,7 @@ class GCDAsyncSocket {
             //
             let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
             let buffer = theCurrentWrite.buffer.bytes
-            buffer.advancedBy(theCurrentWrite.bytesDone)
+            buffer.advanced(by:theCurrentWrite.bytesDone)
             let bytesToWrite = theCurrentWrite.buffer.length - theCurrentWrite.bytesDone
 //            if (bytesToWrite > SIZE_MAX) // NSUInteger may be bigger than size_t (write param 3)
 //            {
@@ -4247,8 +4247,8 @@ class GCDAsyncSocket {
         // Note that if CFStream is involved, it may have maliciously put our socket in blocking mode.
 
         if waiting {
-            if let index = flags.indexOf(.SocketCanAcceptBytes) {
-                flags.removeAtIndex(index)
+            if let index = flags.index(of:.SocketCanAcceptBytes) {
+                flags.remove(at:index)
             }
             if !usingCFStreamForTLS() {
                 resumeWriteSource()
@@ -4279,8 +4279,8 @@ class GCDAsyncSocket {
             // so we're waiting for another callback to notify us of available space in the lower-level output buffer.
             if !waiting && error == nil {
                 // This would be the case if our write was able to accept some data, but not all of it.
-                if let index = flags.indexOf(.SocketCanAcceptBytes) {
-                    flags.removeAtIndex(index)
+                if let index = flags.index(of:.SocketCanAcceptBytes) {
+                    flags.remove(at:index)
                 }
                 if !usingCFStreamForTLS(){
                     resumeWriteSource()
@@ -4396,8 +4396,8 @@ class GCDAsyncSocket {
             }
             
             // Unpause writes, and continue
-            if let index = flags.indexOf(.WritesPaused) {
-                flags.removeAtIndex(index)
+            if let index = flags.index(of:.WritesPaused) {
+                flags.remove(at:index)
             }
             doWriteData()
         }else{
@@ -4603,12 +4603,12 @@ class GCDAsyncSocket {
             // Need to wait for readSource to fire and notify us of
             // available data in the socket's internal read buffer.
             resumeReadSource()
-            bufferLength.memory = 0
+            bufferLength.pointee = 0
             return errSSLWouldBlock
         }
         
         var totalBytesRead = 0
-        var totalBytesLeftToBeRead = bufferLength.memory
+        var totalBytesLeftToBeRead = bufferLength.pointee
         var done = false
         var socketError = false
         
@@ -4665,7 +4665,7 @@ class GCDAsyncSocket {
                 readIntoPreBuffer = false
                 bytesToRead = totalBytesLeftToBeRead
                 buf = buffer
-                buf?.advancedBy(totalBytesRead)
+                buf?.advanced(by:totalBytesRead)
             }
             
             let result = read(socketFD, buf!, bytesToRead)
@@ -4691,7 +4691,7 @@ class GCDAsyncSocket {
                     theSSLPreBuffer.didWrite(bytes: bytesReadFromSocket)
                     let bytesToCopy = totalBytesLeftToBeRead < bytesReadFromSocket ? totalBytesLeftToBeRead : bytesReadFromSocket
                     print("Verbose: sslReadWithBuffer() Copying \(bytesToCopy) out of sslPreBufer")
-                    buffer.advancedBy(totalBytesRead)
+                    buffer.advanced(by:totalBytesRead)
                     buffer.initializeFrom(theSSLPreBuffer.readBuffer(), count: bytesToCopy)
                     theSSLPreBuffer.didRead(bytes: bytesToCopy)
                     
@@ -4711,7 +4711,7 @@ class GCDAsyncSocket {
             }
         }
         
-        bufferLength.memory = totalBytesRead
+        bufferLength.pointee = totalBytesRead
         if done {
             return noErr
         }
@@ -4728,7 +4728,7 @@ class GCDAsyncSocket {
             // Need to wait for writeSource to fire and notify us of
             // available space in the socket's internal write buffer.
             resumeWriteSource()
-            bufferLength.memory = 0
+            bufferLength.pointee = 0
             return errSSLWouldBlock
         }
         
@@ -4738,7 +4738,7 @@ class GCDAsyncSocket {
         var socketError = false
         
         let socketFD = (_socket4FD != SOCKET_NULL) ? _socket4FD : (_socket6FD != SOCKET_NULL) ? _socket6FD : socketUN
-        let result = write(socketFD, buffer, bytesToWrite.memory)
+        let result = write(socketFD, buffer, bytesToWrite.pointee)
         if result < 0 {
             if errno != EWOULDBLOCK {
                 socketError = true
@@ -4748,12 +4748,12 @@ class GCDAsyncSocket {
             flags.removeElement(.SocketCanAcceptBytes)
         }else{
             bytesWritten = result
-            if bytesWritten == bytesToWrite.memory {
+            if bytesWritten == bytesToWrite.pointee {
                 done = true
             }
         }
         
-        bufferLength.memory = bytesWritten
+        bufferLength.pointee = bytesWritten
         if done {
             return noErr
         }
@@ -4769,7 +4769,7 @@ class GCDAsyncSocket {
             print("What the deuce?")
             return 0
         }
-        let asyncSocket = GCDAsyncSocket(connection.memory)
+        let asyncSocket = GCDAsyncSocket(connection.pointee)
         return asyncSocket.sslReadWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
     }
     
@@ -4778,7 +4778,7 @@ class GCDAsyncSocket {
             print("What the deuce?")
             return 0
         }
-        let asyncSocket = GCDAsyncSocket(connection.memory)
+        let asyncSocket = GCDAsyncSocket(connection.pointee)
         return asyncSocket.sslWriteWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
     }*/
     func ssl_startTLS() {
@@ -4795,9 +4795,9 @@ class GCDAsyncSocket {
         // Create SSLContext, and setup IO callbacks and connection ref
 //        if #available(iOS 9, *){//, OSX 10.8
             if isServer {
-                _sslContext = SSLCreateContext(kCFAllocatorDefault, .ServerSide, .StreamType)
+                _sslContext = SSLCreateContext(kCFAllocatorDefault, .serverSide, .streamType)
             }else{
-                _sslContext = SSLCreateContext(kCFAllocatorDefault, .ClientSide, .StreamType)
+                _sslContext = SSLCreateContext(kCFAllocatorDefault, .clientSide, .streamType)
             }
             guard let theSSLContext = _sslContext else {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLCreateContext()"))
@@ -4820,7 +4820,7 @@ class GCDAsyncSocket {
                                         print("What the deuce?")
                                         return 0
                                     }
-                                    let asyncSocket = GCDAsyncSocket(connection.memory)
+                                    let asyncSocket = GCDAsyncSocket(connection.pointee)
                                     return asyncSocket.sslReadWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
                                 },
                                //SSLWriteFunction
@@ -4829,7 +4829,7 @@ class GCDAsyncSocket {
                                         print("What the deuce?")
                                         return 0
                                     }
-                                    let asyncSocket = GCDAsyncSocket(connection.memory)
+                                    let asyncSocket = GCDAsyncSocket(connection.pointee)
                                     return asyncSocket.sslWriteWithBuffer(UnsafeMutablePointer<CInt>(data), length:dataLength)
                                 })
         guard status == noErr else {
@@ -4851,7 +4851,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Manual trust validation is not supported for server sockets"))
                 return
             }
-            status = SSLSetSessionOption(theSSLContext, .BreakOnServerAuth, true)
+            status = SSLSetSessionOption(theSSLContext, .breakOnServerAuth, true)
             guard status == noErr else {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption \(status)"))
                 return
@@ -4901,7 +4901,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for kCFStreamSSLPeerName. Value must be of type String for kCFStreamSSLPeerName."))
                 return
             }
-            let peer = peerName.cStringUsingEncoding(NSUTF8StringEncoding)
+            let peer = peerName.cString(usingEncoding:NSUTF8StringEncoding)
             let peerNameLength = peerName.characters.count
             status = SSLSetPeerDomainName(theSSLContext, peer, peerNameLength)
             guard status == noErr else {
@@ -4943,7 +4943,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLProtocolVersionMin. Value must be of type NSNumber for GCDAsyncSocketSSLProtocolVersionMin."))
                 return
             }
-            if let minProtocol = SSLProtocol(rawValue:minProtocolNumber.intValue) where minProtocol != SSLProtocol.SSLProtocolUnknown {
+            if let minProtocol = SSLProtocol(rawValue:minProtocolNumber.intValue) where minProtocol != SSLProtocol.sslProtocolUnknown {
                 status = SSLSetProtocolVersionMin(theSSLContext, minProtocol)
                 guard status == noErr else {
                     closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetProtocolVersionMin \(status)"))
@@ -4958,7 +4958,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLProtocolVersionMax. Value must be of type NSNumber for GCDAsyncSocketSSLProtocolVersionMax."))
                 return
             }
-            if let maxProtocol = SSLProtocol(rawValue:maxProtocolNumber.intValue) where maxProtocol != SSLProtocol.SSLProtocolUnknown {
+            if let maxProtocol = SSLProtocol(rawValue:maxProtocolNumber.intValue) where maxProtocol != SSLProtocol.sslProtocolUnknown {
                 status = SSLSetProtocolVersionMin(theSSLContext, maxProtocol)
                 guard status == noErr else {
                     closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetProtocolVersionMax \(status)"))
@@ -4973,7 +4973,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLSessionOptionFalseStart. Value must be of type NSNumber for GCDAsyncSocketSSLSessionOptionFalseStart."))
                 return
             }
-            status = SSLSetSessionOption(theSSLContext, .FalseStart, falseStart.boolValue)
+            status = SSLSetSessionOption(theSSLContext, .falseStart, falseStart.boolValue)
             guard status == noErr else {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption:FalseStart \(status)"))
                 return
@@ -4986,7 +4986,7 @@ class GCDAsyncSocket {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Invalid value for GCDAsyncSocketSSLSessionOptionFalseStart. Value must be of type NSNumber for GCDAsyncSocketSSLSessionOptionFalseStart."))
                 return
             }
-            status = SSLSetSessionOption(theSSLContext, .SendOneByteRecord, sendOneByteRecord.boolValue)
+            status = SSLSetSessionOption(theSSLContext, .sendOneByteRecord, sendOneByteRecord.boolValue)
             guard status == noErr else {
                 closeSocket(withError: GCDAsyncSocketError.OtherError(message: "Error in SSLSetSessionOption:SendOneByteRecord \(status)"))
                 return
@@ -5168,7 +5168,7 @@ class GCDAsyncSocket {
         maybeDequeueWrite()
         
     }
-    func cf_abortSSLHandshake(error:ErrorType?) throws {
+    func cf_abortSSLHandshake(error:ErrorProtocol?) throws {
         guard !flags.contains(.StartingReadTLS) || !flags.contains(.StartingWriteTLS) else {
             return
         }
@@ -5659,12 +5659,12 @@ class GCDAsyncSocket {
             hints.ai_socktype = SOCK_STREAM
             hints.ai_protocol = IPPROTO_TCP
             
-            var res0 = UnsafeMutablePointer<addrinfo>.init()
-            guard let hostCString = host.cStringUsingEncoding(NSUTF8StringEncoding) else{
+            var res0:UnsafeMutablePointer<addrinfo> = nil//UnsafeMutablePointer<addrinfo>()
+            guard let hostCString = host.cString(usingEncoding:NSUTF8StringEncoding) else{
                 print("Warning: host failed to convert to c string")
                 return addresses
             }
-            guard let portCString = portStr.cStringUsingEncoding(NSUTF8StringEncoding) else{
+            guard let portCString = portStr.cString(usingEncoding:NSUTF8StringEncoding) else{
                 print("Warning: port failed to convert to c string")
                 return addresses
             }
@@ -5675,29 +5675,29 @@ class GCDAsyncSocket {
             var capacity = 0
             var res = res0
             while res != nil {
-                if res.memory.ai_family == AF_INET || res.memory.ai_family == AF_INET6 {
+                if res.pointee.ai_family == AF_INET || res.pointee.ai_family == AF_INET6 {
                     capacity += 1
                 }
-                res = res.memory.ai_next
+                res = res.pointee.ai_next
             }
             addresses.reserveCapacity(capacity)
             
             
             res = res0
             while res != nil {
-                if res.memory.ai_family == AF_INET {
+                if res.pointee.ai_family == AF_INET {
                     // Found IPv4 address.
                     // Wrap the native address structure, and add to results.
-                    let address4 = NSData.init(bytes: res.memory.ai_addr, length: Int(res.memory.ai_addrlen))
+                    let address4 = NSData.init(bytes: res.pointee.ai_addr, length: Int(res.pointee.ai_addrlen))
                     addresses.append(address4)
                 }
-                else if res.memory.ai_family == AF_INET6 {
+                else if res.pointee.ai_family == AF_INET6 {
                     // Found IPv6 address.
                     // Wrap the native address structure, and add to results.
-                    let address6 = NSData.init(bytes: res.memory.ai_addr, length: Int(res.memory.ai_addrlen))
+                    let address6 = NSData.init(bytes: res.pointee.ai_addr, length: Int(res.pointee.ai_addrlen))
                     addresses.append(address6)
                 }
-                res = res.memory.ai_next
+                res = res.pointee.ai_next
             }
             freeaddrinfo(res0);
             
@@ -5713,22 +5713,22 @@ class GCDAsyncSocket {
      **/
     class func hostFromSockaddr4(sockaddr4:UnsafePointer<sockaddr_in>) -> String? {
         var addrBuf = [CChar]()
-        addrBuf = [CChar](count: Int(INET_ADDRSTRLEN), repeatedValue: 0)
+        addrBuf = [CChar](repeating:0, count: Int(INET_ADDRSTRLEN))
         
-        var address4:sockaddr_in = UnsafePointer<sockaddr_in>(sockaddr4).memory
+        var address4:sockaddr_in = UnsafePointer<sockaddr_in>(sockaddr4).pointee
         inet_ntop(AF_INET, &address4.sin_addr, &addrBuf, socklen_t(INET_ADDRSTRLEN))
         
-        return String.fromCString(addrBuf)
+        return String(cString:addrBuf)
     }
     class func hostFromSockaddr6(sockaddr6:UnsafePointer<sockaddr_in6>) -> String? {
         var addrBuf = [CChar]()
-        addrBuf = [CChar](count: Int(INET6_ADDRSTRLEN), repeatedValue: 0)
+        addrBuf = [CChar](repeating:0, count: Int(INET6_ADDRSTRLEN))
         
-        var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(sockaddr6).memory
+        var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(sockaddr6).pointee
         inet_ntop(AF_INET6, &address6.sin6_addr, &addrBuf, socklen_t(INET6_ADDRSTRLEN))
         
         
-        return String.fromCString(addrBuf)
+        return String(cString:addrBuf)
     }
     class func portFromSockaddr4( sockaddr4:inout sockaddr_in) -> UInt16 {
         return sockaddr4.sin_port.bigEndian
@@ -5737,7 +5737,7 @@ class GCDAsyncSocket {
         return sockaddr6.sin6_port.bigEndian
     }
     class func urlFromSockaddrUN( sockaddrUn:inout sockaddr_un) -> NSURL? {
-        guard let path = String.init(CString: sockaddrUn.getPath(), encoding: NSUTF8StringEncoding) else {
+        guard let path = String(cString: sockaddrUn.getPath(), encoding: NSUTF8StringEncoding) else {
             return nil
         }
         return NSURL(string: path)
@@ -5755,7 +5755,7 @@ class GCDAsyncSocket {
     }
     class func isIPv4Address(address:NSData) -> Bool {
         if address.length >= sizeof(sockaddr) {
-            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).pointee {
                 return sockaddrX.sa_family == sa_family_t(AF_INET)
             }
         }
@@ -5763,7 +5763,7 @@ class GCDAsyncSocket {
     }
     class func isIPv6Address(address:NSData) -> Bool {
         if address.length >= sizeof(sockaddr) {
-            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).pointee {
                 return sockaddrX.sa_family == sa_family_t(AF_INET6)
             }
         }
@@ -5775,9 +5775,9 @@ class GCDAsyncSocket {
     }
     class func getHost( host:inout String, port:inout UInt16, family:inout sa_family_t, fromAddress addr:NSData?) -> Bool {
         if let address = addr where address.length >= sizeof(sockaddr) {
-            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).memory {
+            if let sockaddrX:sockaddr = UnsafePointer<sockaddr>(address.bytes).pointee {
                 if sockaddrX.sa_family == sa_family_t(AF_INET) && address.length >= sizeof(sockaddr_in) {
-                    var address4:sockaddr_in = UnsafePointer<sockaddr_in>(address.bytes).memory
+                    var address4:sockaddr_in = UnsafePointer<sockaddr_in>(address.bytes).pointee
                     if let h = hostFromSockaddr4(&address4) {
                         host = h
                     }
@@ -5785,7 +5785,7 @@ class GCDAsyncSocket {
                     family = sa_family_t(AF_INET)
                     return true
                 }else if sockaddrX.sa_family == sa_family_t(AF_INET6)  && address.length >= sizeof(sockaddr_in6) {
-                    var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(address.bytes).memory
+                    var address6:sockaddr_in6 = UnsafePointer<sockaddr_in6>(address.bytes).pointee
                     if let h = hostFromSockaddr6(&address6) {
                         host = h
                     }
@@ -5798,16 +5798,16 @@ class GCDAsyncSocket {
         return false
     }
     class func CRLFData() -> NSData? {
-        return "\r\n".dataUsingEncoding(NSUTF8StringEncoding)
+        return "\r\n".data(usingEncoding:NSUTF8StringEncoding)
     }
     class func CRData() -> NSData? {
-        return "\r".dataUsingEncoding(NSUTF8StringEncoding)
+        return "\r".data(usingEncoding:NSUTF8StringEncoding)
     }
     class func LFData() -> NSData? {
-        return "\n".dataUsingEncoding(NSUTF8StringEncoding)
+        return "\n".data(usingEncoding:NSUTF8StringEncoding)
     }
     class func ZeroData() -> NSData? {
-        return "".dataUsingEncoding(NSUTF8StringEncoding)
+        return "".data(usingEncoding:NSUTF8StringEncoding)
     }
     
 }

@@ -50,8 +50,8 @@ class SwiftTests: XCTestCase, GCDAsyncSocketDelegate {
         } catch {
             XCTFail("\(error)")
         }
-        expectation = expectationWithDescription("Test Full connnection")
-        waitForExpectationsWithTimeout(30) { (error: NSError?) -> Void in
+        expectation = expectation(withDescription: "Test Full Connection")
+        waitForExpectations(withTimeout:30) { (error: NSError?) -> Void in
             if error != nil {
                 XCTFail("\(error)")
             }
@@ -97,7 +97,7 @@ class SwiftTests: XCTestCase, GCDAsyncSocketDelegate {
     func socketDidCloseReadStream(sock:GCDAsyncSocket) {
         
     }
-    func socketDidDisconnect(sock:GCDAsyncSocket?, withError:ErrorType?) {
+    func socketDidDisconnect(sock:GCDAsyncSocket?, withError:ErrorProtocol?) {
         
     }
     func socketDidSecure(sock:GCDAsyncSocket) {

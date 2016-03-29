@@ -36,14 +36,14 @@ class GCDAsyncSocketPreBuffer {
     
     init(withCapacity numBytes : size_t) {
         preBufferSize = numBytes
-        preBuffer = UnsafeMutablePointer<CInt>.alloc(preBufferSize);
+        preBuffer = UnsafeMutablePointer<CInt>(allocatingCapacity:preBufferSize);
         
         
         readPointer = preBuffer
         writePointer = preBuffer
     }
     deinit {
-        preBuffer.dealloc(preBufferSize)
+        preBuffer.deallocateCapacity(preBufferSize)
     }
     func ensureCapacityForWrite(numBytes : size_t) {
         let availableSpace = availableBytes()
@@ -51,7 +51,7 @@ class GCDAsyncSocketPreBuffer {
             let additionalBytes = numBytes - availableSpace;
             
             let newPreBufferSize = preBufferSize + additionalBytes;
-            let newPreBuffer = UnsafeMutablePointer<CInt>.alloc(newPreBufferSize);
+            let newPreBuffer = UnsafeMutablePointer<CInt>(allocatingCapacity:newPreBufferSize);
             newPreBuffer.initializeFrom(preBuffer, count: preBufferSize)//TODO: this might be duplicated in the Socket class after we call ensureCapacityForWrite
             
             let readPointerOffset = readPointer - preBuffer;

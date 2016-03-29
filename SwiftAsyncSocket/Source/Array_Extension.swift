@@ -12,8 +12,8 @@ import Foundation
 extension Array where Element: Equatable {
     
     mutating func removeElement(element: Element) -> Element? {
-        if let index = indexOf(element) {
-            return removeAtIndex(index)
+        if let index = index(of:element) {
+            return remove(at: index)
         }
         return nil
     }

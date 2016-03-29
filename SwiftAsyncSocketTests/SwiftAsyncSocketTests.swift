@@ -36,9 +36,9 @@ class SwiftAsyncSocketTests: XCTestCase {
     func testMemcpyReplacement(){
         let string = "the quick brown fox"
         //try copying a whole buffer
-        if let sourceBuffer = string.dataUsingEncoding(NSUTF8StringEncoding)?.mutableCopy() as? NSMutableData {
+        if let sourceBuffer = string.data(usingEncoding:NSUTF8StringEncoding, allowLossyConversion: false)?.mutableCopy() as? NSMutableData {
             let src : UnsafeMutablePointer<CInt> = UnsafeMutablePointer<CInt>(sourceBuffer.mutableBytes)
-            let dest = UnsafeMutablePointer<CInt>.alloc(string.characters.count)
+            let dest = UnsafeMutablePointer<CInt>(allocatingCapacity:string.characters.count)
             dest.initializeFrom(src, count: sourceBuffer.length)
             let newBuffer = NSData.init(bytes: dest, length: sourceBuffer.length)
             guard let newString = NSString(data: newBuffer, encoding: NSUTF8StringEncoding) else{
@@ -98,7 +98,7 @@ class SwiftAsyncSocketTests: XCTestCase {
     
     func testPerformanceExample() {
         // This is an example of a performance test case.
-        self.measureBlock {
+        self.measure {
             // Put the code you want to measure the time of here.
         }
     }

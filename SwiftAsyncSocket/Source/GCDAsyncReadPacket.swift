@@ -67,7 +67,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
             let buffSpace: Int = buffSize - buffUsed
             if bytesToRead > buffSpace {
                 if let buffInc: Int = bytesToRead - buffSpace {
-                    buffer?.increaseLengthBy(buffInc)
+                    buffer?.increaseLength(by: buffInc)
                 }
             }
         }
@@ -334,7 +334,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
             maxPreBufferLength = preBufferLength;
         }
         
-        let seq = UnsafeMutablePointer<CInt>.alloc(termLength)
+        let seq = UnsafeMutablePointer<CInt>(allocatingCapacity:termLength)
         let termBuf = UnsafeMutablePointer<CInt>(term!.bytes)
         
         var bufLen = min(bytesDone, (termLength - 1));
@@ -353,7 +353,7 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
             {
                 // Combining bytes from buffer and preBuffer
                 seq.initializeFrom(buf, count: bufLen)
-                seq.advancedBy(bufLen).initializeFrom(pre, count: preLen)
+                seq.advanced(by:bufLen).initializeFrom(pre, count: preLen)
                 if memcmp(seq, termBuf, termLength) == 0 {
                     result = preLen
                     found = true
