@@ -67,7 +67,11 @@ class GCDAsyncReadPacket : GCDAsyncSpecialPacket {
             let buffSpace: Int = buffSize - buffUsed
             if bytesToRead > buffSpace {
                 if let buffInc: Int = bytesToRead - buffSpace {
-                    buffer?.increaseLength(by: buffInc)
+                    #if os(Linux)
+                        buffer?.increaseLengthBy(buffInc)
+                    #else
+                        buffer?.increaseLength(by:buffInc)
+                    #endif
                 }
             }
         }
