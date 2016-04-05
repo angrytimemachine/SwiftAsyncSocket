@@ -2467,13 +2467,17 @@ class GCDAsyncSocket {
         
         let parseAddresses = { (host:UInt32, inAddress:in6_addr) -> Void in
             var sockaddr4 = sockaddr_in()
+            #if !os(Linux)
             sockaddr4.sin_len         = UInt8(sizeofValue(sockaddr4))
+            #endif
             sockaddr4.sin_family      = sa_family_t(AF_INET)
             sockaddr4.sin_port        = thePort.bigEndian
             sockaddr4.sin_addr.s_addr = in_addr_t(host.bigEndian)
 
             var sockaddr6 = sockaddr_in6();
+            #if !os(Linux)
             sockaddr6.sin6_len       = UInt8(sizeofValue(sockaddr6))
+            #endif
             sockaddr6.sin6_family    = sa_family_t(AF_INET6)
             sockaddr6.sin6_port      = port.bigEndian
             sockaddr6.sin6_addr      = inAddress

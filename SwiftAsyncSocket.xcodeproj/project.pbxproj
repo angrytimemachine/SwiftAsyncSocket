@@ -44,6 +44,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		380239841CB395740053EB3A /* build-via-docker.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "build-via-docker.sh"; sourceTree = "<group>"; };
 		38283C631C8F6504008F2BEB /* Package.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 		38283C691C8F67B1008F2BEB /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = module.modulemap; sourceTree = "<group>"; };
 		3829CD781C82D0BA0058732C /* Array_Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Array_Extension.swift; path = Source/Array_Extension.swift; sourceTree = "<group>"; };
@@ -100,6 +101,7 @@
 		382AD48B1C670EE400698988 = {
 			isa = PBXGroup;
 			children = (
+				380239841CB395740053EB3A /* build-via-docker.sh */,
 				382AD4971C670EE400698988 /* SwiftAsyncSocket */,
 				382AD4A31C670EE400698988 /* SwiftAsyncSocketTests */,
 				382AD4961C670EE400698988 /* Products */,
@@ -150,6 +152,23 @@
 		};
 /* End PBXHeadersBuildPhase section */
 
+/* Begin PBXLegacyTarget section */
+		380239801CB391E40053EB3A /* SwifAsynSocketLinux */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION) ";
+			buildConfigurationList = 380239811CB391E40053EB3A /* Build configuration list for PBXLegacyTarget "SwifAsynSocketLinux" */;
+			buildPhases = (
+			);
+			buildToolPath = "../build-via-docker.sh";
+			buildWorkingDirectory = /Users/joelsaltzman/Sites/SwiftAsyncSocket/SwiftAsyncSocket;
+			dependencies = (
+			);
+			name = SwifAsynSocketLinux;
+			passBuildSettingsInEnvironment = 1;
+			productName = SwifAsynSocketLinux;
+		};
+/* End PBXLegacyTarget section */
+
 /* Begin PBXNativeTarget section */
 		382AD4941C670EE400698988 /* SwiftAsyncSocket */ = {
 			isa = PBXNativeTarget;
@@ -199,6 +218,9 @@
 				LastUpgradeCheck = 0730;
 				ORGANIZATIONNAME = "Joel Saltzman";
 				TargetAttributes = {
+					380239801CB391E40053EB3A = {
+						CreatedOnToolsVersion = 7.3;
+					};
 					382AD4941C670EE400698988 = {
 						CreatedOnToolsVersion = 7.3;
 					};
@@ -221,6 +243,7 @@
 			targets = (
 				382AD4941C670EE400698988 /* SwiftAsyncSocket */,
 				382AD49E1C670EE400698988 /* SwiftAsyncSocketTests */,
+				380239801CB391E40053EB3A /* SwifAsynSocketLinux */,
 			);
 		};
 /* End PBXProject section */
@@ -294,6 +317,20 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		380239821CB391E40053EB3A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DOCKER_CMD = "docker run -rm -v ${PWD}:/swift_build saltzmanjoelh/swiftubuntu /bin/bash -c \"swift build -Xcc -fblocks\"";
+			};
+			name = Debug;
+		};
+		380239831CB391E40053EB3A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DOCKER_CMD = "docker run -rm -v ${PWD}:/swift_build saltzmanjoelh/swiftubuntu /bin/bash -c \"swift build -Xcc -fblocks\"";
+			};
+			name = Release;
+		};
 		382AD4A71C670EE400698988 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -448,6 +485,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		380239811CB391E40053EB3A /* Build configuration list for PBXLegacyTarget "SwifAsynSocketLinux" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				380239821CB391E40053EB3A /* Debug */,
+				380239831CB391E40053EB3A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
 		382AD48F1C670EE400698988 /* Build configuration list for PBXProject "SwiftAsyncSocket" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
